@@ -1,0 +1,124 @@
+# =============================================================================
+# REQUIREMENTS.TXT - CHAT IA INDEPENDENTE
+# =============================================================================
+# Dependências necessárias para o Chat IA Independente
+#
+# 📦 INSTALAÇÃO:
+#   pip install -r requirements.txt
+#
+# ⚠️ NOTA: Algumas dependências são opcionais:
+#   - openai: Necessário apenas se DUIMP_AI_ENABLED=true e DUIMP_AI_PROVIDER=openai
+#   - anthropic: Necessário apenas se DUIMP_AI_ENABLED=true e DUIMP_AI_PROVIDER=anthropic
+#   - pyodbc: Necessário apenas se usando pyodbc para SQL Server (não Node.js adapter)
+#   - gunicorn: Necessário apenas para produção (servidor WSGI Linux)
+#   - waitress: Necessário apenas para produção (servidor WSGI multiplataforma)
+#   - Flask-Limiter: Necessário apenas se usar rate limiting (recomendado produção)
+# =============================================================================
+
+# Core Flask Framework
+Flask>=3.0.0,<4.0.0
+
+# HTTP Requests (usado para comunicação com APIs)
+requests>=2.31.0,<3.0.0
+
+# Carregamento de variáveis de ambiente (.env)
+python-dotenv>=1.0.0,<2.0.0
+
+# Banco de dados SQL Server (opcional - pode usar Node.js adapter em vez disso)
+pyodbc>=5.0.0,<6.0.0
+
+# Banco de dados Postgres (NOVO - 22/01/2026)
+psycopg2-binary>=2.9.9,<3.0.0
+
+# Serviço de IA - OpenAI (opcional)
+openai>=1.0.0,<2.0.0
+
+# Serviço de IA - Anthropic (opcional)
+# anthropic>=0.18.0,<1.0.0
+
+# =============================================================================
+# LangChain (V1 - usado APENAS para planner de filtro de relatórios, opcional)
+# =============================================================================
+# ⚠️ Não altera o comportamento por padrão.
+# Para ativar: REPORT_FUZZY_PLANNER_BACKEND=langchain
+langchain
+langchain-core
+langchain-openai
+
+# =============================================================================
+# NESH HF/FAISS (opcional - indexação semântica local)
+# =============================================================================
+# ⚠️ Só é usado se NESH_HF_ENABLED=true e o índice FAISS existir.
+sentence-transformers
+faiss-cpu
+numpy
+
+# Web Search para enriquecer consultas (opcional)
+duckduckgo-search>=4.0.0,<5.0.0
+
+# RPA / automação de navegação (opcional - Mercante e outros portais)
+playwright>=1.42.0,<2.0.0
+
+# Geração de PDF (para extrato de DUIMP)
+xhtml2pdf>=0.2.11,<1.0.0
+
+# Parsing de datas (usado em processo_kanban_dto.py)
+python-dateutil>=2.8.0,<3.0.0
+
+# Agendamento de tarefas (para notificações agendadas)
+APScheduler>=3.10.4
+
+# Parsing de feeds RSS (para notícias do Siscomex)
+feedparser>=6.0.10,<7.0.0  # ✅ NOVO (17/01/2026): Para integração de feeds RSS do Siscomex
+
+# Parsing de HTML (para importação de legislação)
+beautifulsoup4>=4.12.0,<5.0.0
+
+# Leitura de PDF (para importação de legislação)
+PyPDF2>=3.0.0,<4.0.0
+pdfplumber>=0.10.0,<1.0.0  # ✅ NOVO (13/01/2026): Biblioteca mais robusta para extração de texto de PDFs
+pdf2image>=1.16.0,<2.0.0  # ✅ NOVO (13/01/2026): Para converter PDF para imagem (necessário para OpenAI Vision)
+Pillow>=10.0.0,<11.0.0  # ✅ NOVO (13/01/2026): Necessário para pdf2image (manipulação de imagens)
+
+# =============================================================================
+# DEPENDÊNCIAS PARA PRODUÇÃO (OPCIONAIS - INSTALAR SEPARADAMENTE)
+# =============================================================================
+# Para instalação em produção, escolha UMA opção:
+
+# Opção 1: Gunicorn (Linux - Recomendado)
+gunicorn>=21.2.0
+
+# Opção 2: Waitress (Windows/Linux - Multiplataforma)
+# waitress>=2.1.0
+
+# Opção 3: Rate Limiting (Recomendado para produção)
+# Flask-Limiter>=3.5.0
+
+# =============================================================================
+# DEPENDÊNCIAS DO SISTEMA (NÃO INSTALADAS VIA PIP):
+# =============================================================================
+# - OpenSSL: Necessário para autenticação mTLS (certificados PKCS#12)
+#   Windows: Instalar via https://slproweb.com/products/Win32OpenSSL.html
+#   Linux: sudo apt-get install openssl
+#   macOS: brew install openssl
+#
+# - ODBC Driver 17 ou 18 for SQL Server (se usando pyodbc)
+#   Windows: https://aka.ms/downloadmsodbcsql
+#   Linux: https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server
+#   macOS: brew install msodbcsql18
+#
+# - Node.js (opcional - apenas se usar Node.js adapter para SQL Server)
+#   https://nodejs.org/
+#
+# - Poppler (necessário para pdf2image - conversão de PDF para imagem)
+#   macOS: brew install poppler
+#   Linux: sudo apt-get install poppler-utils
+#   Windows: https://github.com/oschwartz10612/poppler-windows/releases
+#
+# - Python 3.9 ou superior
+# =============================================================================
+
+
+
+
+

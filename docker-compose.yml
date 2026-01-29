@@ -1,0 +1,87 @@
+# Docker Compose - Chat IA Independente
+# Atualizado 27/01/2026: healthchecks, depends_on com condition
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: maike-db
+    restart: always
+    profiles: ["infra"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-maike_chat}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maike123}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - maike-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-maike_chat}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: maike-web
+    restart: always
+    command: >
+      gunicorn --bind 0.0.0.0:5001
+      --workers 1
+      --timeout ${GUNICORN_TIMEOUT:-600}
+      --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-60}
+      app:app
+    environment:
+      # ✅ Persistência do SQLite (cache/pending_intents/etc.)
+      - DB_PATH=/app/data/chat_ia.db
+      # ✅ NESH (arquivo grande fora do repo): montar no container e usar path interno
+      - NESH_CHUNKS_PATH=/app/big/nesh_chunks.json
+    env_file:
+      - .env
+    volumes:
+      # ✅ Produção: prefira remover o bind mount "." e usar apenas a imagem.
+      # Para dev: manter "." facilita hot-reload (mas depende do seu fluxo).
+      - .:/app
+      - ./downloads:/app/downloads
+      - maike_data:/app/data
+      # ✅ Montar pasta grande com NESH (somente leitura)
+      - /Users/helenomaffra/CHAT-IA-BIG:/app/big:ro
+      - ./.secure:/app/.secure:ro
+      - ./.mtls_cache:/app/.mtls_cache
+      - ./legislacao_files:/app/legislacao_files
+    ports:
+      - "5001:5001"
+    networks:
+      - maike-network
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: maike-nginx
+    restart: always
+    profiles: ["infra"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web
+    networks:
+      - maike-network
+
+networks:
+  maike-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  maike_data:

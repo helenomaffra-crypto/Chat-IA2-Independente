@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-br">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AFRMM — Pagamentos</title>
+    <style>
+      :root { color-scheme: light; }
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; background: #0b1220; color: #e6eaf2; }
+      .wrap { max-width: 1100px; margin: 0 auto; padding: 24px; }
+      .card { background: #121b2f; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; padding: 16px; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      .meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 16px; margin: 12px 0 0; font-size: 13px; opacity: .9; }
+      .meta b { display: inline-block; min-width: 90px; opacity: .95; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid rgba(255,255,255,.14); }
+      .ok { background: rgba(16,185,129,.12); border-color: rgba(16,185,129,.35); }
+      .warn { background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.35); }
+      .err { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.35); }
+      table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+      th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,.08); vertical-align: top; font-size: 13px; }
+      th { font-size: 12px; letter-spacing: .02em; text-transform: uppercase; opacity: .8; }
+      a { color: #93c5fd; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .muted { opacity: .8; }
+      .empty { padding: 14px 0 0; opacity: .85; }
+      .top-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 13px; }
+      .btn { display: inline-block; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12); }
+      .btn:hover { background: rgba(255,255,255,.09); }
+      code { background: rgba(255,255,255,.06); padding: 2px 6px; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>AFRMM — Pagamentos</h1>
+        {% set ok = (resultado and resultado.get('sucesso')) %}
+        {% set fonte = (resultado.get('fonte') if resultado else None) %}
+        {% if ok %}
+          <span class="pill ok">carregado</span>
+        {% else %}
+          <span class="pill err">erro</span>
+        {% endif %}
+        {% if fonte %}
+          <span class="pill warn">fonte: {{ fonte }}</span>
+        {% endif %}
+
+        <div class="meta">
+          <div><b>Processo</b> {{ processo or '—' }}</div>
+          <div><b>CE</b> {{ ce or '—' }}</div>
+          <div><b>Limite</b> {{ limite }}</div>
+        </div>
+
+        <div class="top-actions">
+          <a class="btn" href="/api/mercante/afrmm/pagamentos?processo={{ (processo or '')|urlencode }}&ce={{ (ce or '')|urlencode }}&limite={{ limite }}">abrir JSON (API)</a>
+        </div>
+
+        {% if not ok %}
+          <div class="empty">
+            ❌ Não foi possível carregar os pagamentos.
+            {% if resultado and resultado.get('resposta') %}
+              <div class="muted" style="margin-top:8px;">{{ resultado.get('resposta') }}</div>
+            {% endif %}
+          </div>
+        {% else %}
+          {% set itens = (resultado.get('dados') or {}).get('itens') %}
+          {% if not itens %}
+            <div class="empty">Nenhum pagamento AFRMM encontrado para os filtros informados.</div>
+          {% else %}
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Processo</th>
+                  <th>CE</th>
+                  <th>Status</th>
+                  <th>Valor débito</th>
+                  <th>Comprovante</th>
+                  <th>Obs.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for it in itens %}
+                  <tr>
+                    <td>{{ it.get('created_at') or '—' }}</td>
+                    <td>{{ it.get('processo_referencia') or '—' }}</td>
+                    <td><code>{{ it.get('ce_mercante') or '—' }}</code></td>
+                    <td>{{ it.get('status') or '—' }}</td>
+                    <td>
+                      {% if it.get('valor_total_debito') %}
+                        R$ {{ '%.2f'|format(it.get('valor_total_debito')) }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if it.get('screenshot_url') %}
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                          <a href="{{ it.get('screenshot_url') }}">PNG</a>
+                          {% if it.get('pdf_url') %}
+                            <a href="{{ it.get('pdf_url') }}" style="color: #10b981;">PDF</a>
+                          {% endif %}
+                        </div>
+                        {% if it.get('screenshot_relpath') %}
+                          <div class="muted" style="margin-top:4px;"><code>{{ it.get('screenshot_relpath').split('/')[-1] }}</code></div>
+                        {% endif %}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </td>
+                    <td class="muted">{{ it.get('observacoes') or '—' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </body>
+</html>
+

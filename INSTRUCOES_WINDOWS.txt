@@ -1,0 +1,96 @@
+═══════════════════════════════════════════════════════════════
+  🤖 CHAT IA DUIMP - INSTRUÇÕES PARA CRIAR EXECUTÁVEL WINDOWS
+═══════════════════════════════════════════════════════════════
+
+📋 PASSO A PASSO:
+
+1️⃣  INSTALAR PYTHON
+   ────────────────────────────────────────────────────────────
+   • Download: https://www.python.org/downloads/
+   • Versão: Python 3.9 ou superior
+   • ⚠️ IMPORTANTE: Marcar "Add Python to PATH" durante instalação
+   • Verificar: Abrir CMD e digitar "python --version"
+
+
+2️⃣  EXTRAIR O ZIP
+   ────────────────────────────────────────────────────────────
+   • Extrair "Chat-IA-Independente-Windows.zip" em uma pasta
+   • Exemplo: C:\Chat-IA-DUIMP\
+
+
+3️⃣  ABRIR POWERSHELL OU CMD
+   ────────────────────────────────────────────────────────────
+   • Navegar até a pasta extraída:
+     cd C:\Chat-IA-DUIMP
+
+
+4️⃣  INSTALAR DEPENDÊNCIAS
+   ────────────────────────────────────────────────────────────
+   pip install -r requirements.txt
+   pip install pyinstaller
+
+
+5️⃣  CRIAR EXECUTÁVEL
+   ────────────────────────────────────────────────────────────
+   python build_windows.py
+   
+   OU:
+   
+   pyinstaller Chat-IA-DUIMP.spec
+
+
+6️⃣  ENCONTRAR O EXECUTÁVEL
+   ────────────────────────────────────────────────────────────
+   • Pasta: dist\Chat-IA-DUIMP.exe
+   • Copiar o .exe para onde quiser usar
+
+
+7️⃣  CONFIGURAR
+   ────────────────────────────────────────────────────────────
+   • Criar arquivo .env na mesma pasta do .exe:
+   
+   DUIMP_AI_ENABLED=true
+   DUIMP_AI_PROVIDER=openai
+   DUIMP_AI_API_KEY=sk-...
+   DUIMP_AI_MODEL=gpt-3.5-turbo          # Padrão: gpt-3.5-turbo (pode usar gpt-4o-mini)
+   PORT=5001
+   
+   • ⚠️ IMPORTANTE: O modelo configurado no .env será exibido no header da UI
+   • O frontend sincroniza automaticamente com o modelo do backend
+
+
+8️⃣  EXECUTAR
+   ────────────────────────────────────────────────────────────
+   • Duplo clique em Chat-IA-DUIMP.exe
+   • Abrir navegador: http://localhost:5001/chat-ia
+   • Ou na rede: http://IP_DA_MAQUINA:5001/chat-ia
+
+
+═══════════════════════════════════════════════════════════════
+  ⚠️  IMPORTANTE
+═══════════════════════════════════════════════════════════════
+
+• O .exe precisa de acesso à rede (mesmos IPs e portas)
+• Se usar SQL Server via pyodbc, instalar ODBC Driver:
+  https://aka.ms/downloadmsodbcsql
+• Firewall: Liberar porta 5001 se outras máquinas vão acessar
+• Banco SQLite será criado automaticamente na pasta do .exe
+• Arquivos JSON necessários (já incluídos no ZIP):
+  - nesh_chunks.json (para busca de NCM)
+  - utils/iata_to_country.py (para conversão aeroporto→país)
+• Certificados (.pfx) devem estar na pasta certs/
+• Para DUIMP em produção, configurar DUIMP_ALLOW_WRITE_PROD=true
+
+
+═══════════════════════════════════════════════════════════════
+  📞 PROBLEMAS?
+═══════════════════════════════════════════════════════════════
+
+Ver documentação completa em:
+docs/INDICE_DOCUMENTACAO.md
+
+Principais documentos:
+• docs/API_DOCUMENTATION.md - Documentação de APIs
+• docs/FLUXO_DESPACHO_ADUANEIRO.md - Fluxo de despacho
+• docs/REFATORACAO_PRODUCAO.md - Recomendações para produção
+

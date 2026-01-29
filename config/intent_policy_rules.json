@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "default_ttl_minutes": 15,
+  "policies": [
+    {
+      "id": "nesh_direto",
+      "priority": 10,
+      "tool_name": "buscar_nota_explicativa_nesh",
+      "tipo": "nesh_direto",
+      "match_any": [
+        "\\bnesh\\b",
+        "nota\\s+explicativa"
+      ],
+      "ncm_regex": "\\b(\\d{2}(?:[.\\s-]?\\d{2}){1,3})\\b",
+      "strip_words_regex": "\\b(busque|buscar|pesquise|pesquisar|consulte|consultar|procure|procurar|mostre|mostrar)\\b",
+      "strip_phrases_regex": [
+        "\\b(na|no)\\b",
+        "\\bnesh\\b",
+        "\\bnota\\s+explicativa\\b"
+      ],
+      "default_args": {
+        "limite": 3
+      }
+    },
+    {
+      "id": "siscomex_noticias",
+      "priority": 15,
+      "tool_name": "listar_noticias_siscomex",
+      "tipo": "siscomex_noticias",
+      "match_any": [
+        "\\bnot[ií]cia(?:s)?\\b.*\\bsiscomex\\b",
+        "\\bsiscomex\\b.*\\bnot[ií]cia(?:s)?\\b",
+        "\\bultim(?:a|as)\\b.*\\bnot[ií]cia(?:s)?\\b.*\\bsiscomex\\b",
+        "\\bnot[ií]cia(?:s)?\\s+(?:do|da)?\\s*siscomex\\b",
+        "\\bnot[ií]cia(?:s)?\\s+siscomex\\b"
+      ],
+      "default_args": {
+        "dias": 7,
+        "limite": 20
+      }
+    },
+    {
+      "id": "legislacao_rag",
+      "priority": 20,
+      "tool_name": "buscar_legislacao_responses",
+      "tipo": "legislacao_rag",
+      "ttl_minutes": 15,
+      "ttl_context": {
+        "tipo_contexto": "modo_legislacao",
+        "chave": "until"
+      },
+      "ttl_exclude_match_any": [
+        "\\bo\\s+que\\s+temos\\s+(?:pra|para)\\s+hoje\\b",
+        "\\bo\\s+que\\s+tem\\s+(?:pra|para)\\s+hoje\\b",
+        "\\bdashboard\\b",
+        "\\bkanban\\b",
+        "\\bprocesso(?:s)?\\b",
+        "\\bcomo\\s+est[aã]o\\b",
+        "\\bstatus\\b",
+        "\\b[a-z]{2,4}\\.\\d{1,4}/\\d{2}\\b",
+        "\\b(alh|vdm|mss|bnd|dmd|gym|sll|mv5|gps|ntm|mcd|dba|arg|upi)\\b",
+        "\\b(ce|cct|di|duimp)\\b",
+        "\\bextrato\\b",
+        "\\bconcilia",
+        "\\bsincroniz",
+        "\\bpagamento(?:s)?\\b",
+        "\\brelat[oó]rio\\b"
+      ],
+      "match_any": [
+        "\\blegisla[çc][ãa]o\\b",
+        "\\bbase\\s+legal\\b",
+        "\\bna\\s+legisla[çc][ãa]o\\b",
+        "\\bpela\\s+legisla[çc][ãa]o\\b",
+        "\\bart\\.?\\b",
+        "\\bartigo\\b",
+        "\\bdecreto\\b",
+        "\\binstru[cç][ãa]o\\s+normativa\\b",
+        "\\blei\\b",
+        "\\bportaria\\b",
+        "\\bregulamento\\s+aduaneiro\\b"
+      ]
+    }
+  ]
+}
+

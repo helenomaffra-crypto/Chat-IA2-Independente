@@ -1,0 +1,10 @@
+{
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "services/chat_service.py",
+    "services/chat_service_*.py",
+    "backups/**"
+  ]
+}
+

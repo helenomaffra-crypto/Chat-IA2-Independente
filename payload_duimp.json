@@ -1,0 +1,30 @@
+{
+  "identificacao": {
+    "importador": {
+      "tipoImportador": "CNPJ",
+      "ni": "A_SER_PREENCHIDO"
+    }
+  },
+  "carga": {
+    "tipoIdentificacaoCarga": "CE",
+    "identificacao": "132505371482300",
+    "unidadeDeclarada": {
+      "codigo": "0717600"
+    }
+  },
+  "documentos": {
+    "documentosInstrucao": [
+      {
+        "tipo": {
+          "codigo": "30"
+        },
+        "palavrasChave": [
+          {
+            "codigo": 1,
+            "valor": "132505371482300"
+          }
+        ]
+      }
+    ]
+  }
+}

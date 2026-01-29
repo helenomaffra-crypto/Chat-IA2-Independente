@@ -1,0 +1,7 @@
+{
+  "urls": {
+    "controller_url": "https://www.mercante.transportes.gov.br/g36127/servlet/serpro.siscomex.mercante.servlet.MercanteController?acao=%27logon%27&passo=%271%27",
+    "pagamento_tab_url": "https://www.mercante.transportes.gov.br/g36127/servlet/serpro.siscomex.mercante.servlet.MercanteController?acao=%27logon%27&passo=%271%27",
+    "pagar_afrmm_url": "https://www.mercante.transportes.gov.br/g36127/servlet/serpro.siscomex.mercante.servlet.MercanteController?acao=%27logon%27&passo=%271%27"
+  }
+}

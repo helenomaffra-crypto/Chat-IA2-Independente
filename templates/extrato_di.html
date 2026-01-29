@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Extrato da DI</title>
+<style>
+  @page { 
+    size: A4; 
+    margin: 1.5cm 1.2cm; 
+  }
+  body { 
+    font-family: 'DejaVu Sans', Arial, sans-serif; 
+    font-size: 9pt; 
+    color: #000; 
+    line-height: 1.4;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 15px;
+    position: relative;
+  }
+  .header-logo {
+    width: 63pt;  /* ✅ Tamanho real do PDF original: 63 pontos */
+    height: 50pt; /* ✅ Tamanho real do PDF original: 50 pontos */
+    margin-bottom: 8px;
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .header-title {
+    font-size: 10pt;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  .header-subtitle {
+    font-size: 9pt;
+    margin-bottom: 2px;
+  }
+  .header-main {
+    font-size: 11pt;
+    font-weight: bold;
+    border-top: 2px solid #000;
+    border-bottom: 2px solid #000;
+    padding: 8px 0;
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+  .info-line {
+    margin: 4px 0;
+    font-size: 9pt;
+  }
+  .info-label {
+    font-weight: bold;
+    display: inline-block;
+    min-width: 120px;
+  }
+  .section {
+    margin: 12px 0;
+    page-break-inside: avoid;
+  }
+  .section-title {
+    font-weight: bold;
+    font-size: 9pt;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #000;
+    padding-bottom: 2px;
+  }
+  .section-content {
+    margin-left: 8px;
+    font-size: 9pt;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0;
+    font-size: 9pt;
+  }
+  th, td {
+    border: 1px solid #888;
+    padding: 4px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #e0e0e0;
+    font-weight: bold;
+    font-size: 8pt;
+  }
+  .tributos-table {
+    margin-top: 8px;
+  }
+  .tributos-table td {
+    text-align: right;
+  }
+  .tributos-table td:first-child {
+    text-align: left;
+  }
+  .valor-currency {
+    text-align: right;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  .alertas-table {
+    margin-top: 8px;
+  }
+  .alertas-table th {
+    background: #f0f0f0;
+  }
+</style>
+</head>
+<body>
+
+{% set dados_gerais = safe_dict(di.get('dadosGerais', {})) %}
+{% set dados_despacho = safe_dict(di.get('dadosDespacho', {})) %}
+{% set numero = dados_gerais.get('numeroDI', 'N/A') %}
+{% set total_adicoes = dados_gerais.get('totalAdicoes', 1) %}
+{% set modalidade = dados_despacho.get('modalidadeDespacho', 'NORMAL') %}
+{% set data_registro = dados_despacho.get('dataHoraRegistro', '') %}
+{% if data_registro and 'T' in data_registro %}
+  {% set data_registro_formatada = data_registro.split('T')[0] %}
+  {% set partes_data = data_registro_formatada.split('-') %}
+  {% if partes_data|length == 3 %}
+    {% set data_registro_formatada = partes_data[2] + '/' + partes_data[1] + '/' + partes_data[0] %}
+  {% endif %}
+{% else %}
+  {% set data_registro_formatada = data_registro[:10] if data_registro else '' %}
+{% endif %}
+
+{# ✅ NOVO (26/01/2026): Numeração no topo (igual PDF oficial) #}
+<div style="text-align: right; font-size: 8pt; margin-bottom: 8px;">
+  Declaração: {{ numero }} {% if data_registro_formatada %}Data do Registro: {{ data_registro_formatada }}{% endif %} 1
+</div>
+
+<div class="header">
+  {# ✅ NOVO (26/01/2026): Logo da Receita Federal #}
+  {% if logo_receita_federal %}
+  <img src="{{ logo_receita_federal }}" alt="Receita Federal" class="header-logo" />
+  {% endif %}
+  <div class="header-title">SECRETARIA DA RECEITA FEDERAL DO BRASIL - RFB</div>
+  <div class="header-subtitle">PORTO DO RIO DE JANEIRO</div>
+  <div class="header-main">EXTRATO DA DECLARAÇÃO DE IMPORTAÇÃO</div>
+  <div class="info-line">
+    <span class="info-label">CONSUMO</span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="info-line">
+    <span class="info-label">Modalidade do Despacho:</span> {{ modalidade }}
+  </div>
+  <div class="info-line">
+    <span class="info-label">Quantidade de Adições:</span> {{ total_adicoes }}
+  </div>
+</div>
+
+{% set importador = safe_dict(di.get('importador', {})) %}
+{% if importador %}
+<div class="section">
+  <div class="section-title">Importador</div>
+  <div class="section-content">
+    {# ✅ NOVO (26/01/2026): CNPJ e Nome na mesma linha (igual PDF oficial) #}
+    <div class="info-line">
+      <span class="info-label">CNPJ:</span> {{ importador.get('numeroIdentificacao', '—') }} {{ importador.get('nomeImportador', '—') }}
+    </div>
+    {% set endereco = safe_dict(importador.get('endereco', {})) %}
+    {% if endereco %}
+    <div class="info-line">
+      {{ endereco.get('logradouro', '') }} {{ endereco.get('numero', '') }}{% if endereco.get('complemento') %}, {{ endereco.get('complemento') }}{% endif %}
+    </div>
+    <div class="info-line">
+      {{ endereco.get('bairro', '') }} - {{ endereco.get('municipio', '') }}/{{ endereco.get('uf', '') }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% set caracterizacao = safe_dict(di.get('caracterizacaoOperacao', {})) %}
+{% set adquirente = safe_dict(caracterizacao.get('adquirente', {})) if caracterizacao else {} %}
+{% if adquirente.get('numeroAdquirente') or adquirente.get('nomeAdquirente') %}
+<div class="section">
+  <div class="section-title">Adquirente da Mercadoria</div>
+  <div class="section-content">
+    {# ✅ NOVO (26/01/2026): CNPJ e Nome na mesma linha (igual PDF oficial) #}
+    <div class="info-line">
+      <span class="info-label">CNPJ:</span> {{ adquirente.get('numeroAdquirente', '—') }} {{ adquirente.get('nomeAdquirente', '—') }}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% set representante = safe_dict(importador.get('representanteLegal', {})) if importador else {} %}
+{% if representante %}
+<div class="section">
+  <div class="section-title">Representante Legal</div>
+  <div class="section-content">
+    {# ✅ NOVO (26/01/2026): CPF e Nome na mesma linha (igual PDF oficial) #}
+    <div class="info-line">
+      <span class="info-label">CPF:</span> {{ representante.get('cpf', '—') }} {{ representante.get('nome', '—') }}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if di.get('processos') %}
+<div class="section">
+  <div class="section-title">Processos</div>
+  <div class="section-content">
+    {% for processo in di.get('processos', []) %}
+    <div class="info-line">
+      <span class="info-label">{{ processo.get('tipo', 'JUDICIAL') }}:</span> {{ processo.get('ident', '—') }}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% set carga = safe_dict(di.get('carga', {})) %}
+{% set basico_carga = safe_dict(carga.get('basicoCarga', {})) if carga else {} %}
+{% if basico_carga %}
+<div class="section">
+  <div class="section-title">Carga</div>
+  <div class="section-content">
+    {% set conhecimento = safe_dict(basico_carga.get('conhecimentoCarga', {})) %}
+    <div class="info-line">
+      <span class="info-label">Tipo do Manifesto:</span> {{ conhecimento.get('tipoConhecimento', 'MANIFESTO DE CARGA') }}
+    </div>
+    <div class="info-line">
+      <span class="info-label">Número do Manifesto:</span> {{ conhecimento.get('idConhecimento', '—') }}
+    </div>
+    {% set armazenamento = safe_dict(carga.get('armazenamento', {})) if carga else {} %}
+    {% if armazenamento %}
+    <div class="info-line">
+      <span class="info-label">Recinto Aduaneiro:</span> {{ armazenamento.get('codigoRecintoAduaneiro', '—') }}
+    </div>
+    {% if armazenamento.get('armazens') %}
+    <div class="info-line">
+      <span class="info-label">Armazém:</span> 
+      {% for arm in armazenamento.get('armazens', []) %}
+        {{ arm.get('nomeArmazemCarga', '—') }}{% if not loop.last %}, {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+    {# ✅ NOVO (26/01/2026): Embalagem e Quantidade na mesma linha (igual PDF oficial) #}
+    {% if carga and carga.get('embalagens') %}
+    <div class="info-line">
+      <span class="info-label">Embalagem:</span> 
+      {% set primeira_emb = carga.get('embalagens', [])[0] if carga.get('embalagens') else {} %}
+      {{ primeira_emb.get('codigoTipoEmbalagem', '—') }}
+      <span class="info-label" style="margin-left: 20px;">Quantidade:</span> 
+      {% set total_quantidade = [0.0] %}
+      {% for emb in carga.get('embalagens', []) %}
+        {% set qtd = (emb.get('quantidadeVolume', 0) or 0)|to_float %}
+        {% if total_quantidade.append(total_quantidade.pop(0) + qtd) %}{% endif %}
+      {% endfor %}
+      {{ total_quantidade[0]|int }}
+    </div>
+    {% endif %}
+    {# ✅ NOVO (26/01/2026): Peso Bruto e Peso Líquido na mesma linha (igual PDF oficial) #}
+    <div class="info-line">
+      <span class="info-label">Peso Bruto:</span> {{ "%.5f"|format((basico_carga.get('pesoBruto', 0) or 0)|to_float) }} Kg
+      <span class="info-label" style="margin-left: 20px;">Peso Líquido:</span> {{ "%.5f"|format((basico_carga.get('pesoLiquido', 0) or 0)|to_float) }} Kg
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% set frete = safe_dict(carga.get('frete', {})) if carga else {} %}
+{% set seguro = safe_dict(carga.get('seguro', {})) if carga else {} %}
+{% set valor_embarque = safe_dict(di.get('valorMercadoriaEmbarque', {})) %}
+{% set valor_descarga = safe_dict(di.get('valorMercadoriaDescarga', {})) %}
+{# ✅ NOVO (26/01/2026): Obter códigos de moeda #}
+{% set moeda_frete = frete.get('codigoMoedaNegociada', '220') if frete else '220' %}
+{% set moeda_seguro = seguro.get('codigoMoedaNegociada', '220') if seguro else '220' %}
+{% set moeda_vmle = valor_embarque.get('codigoMoeda', '220') if valor_embarque else '220' %}
+{% set moeda_vmld = valor_descarga.get('codigoMoeda', '220') if valor_descarga else '220' %}
+<div class="section">
+  <div class="section-title">Valores</div>
+  <div class="section-content">
+    {# ✅ NOVO (26/01/2026): Tabela com cabeçalho "Moeda Valor" (igual PDF oficial) #}
+    <table class="tributos-table">
+      <thead>
+        <tr>
+          <th style="text-align: left;">Moeda</th>
+          <th style="text-align: right;">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Frete:</strong> {{ moeda_frete|get_moeda_nome }}</td>
+          <td class="valor-currency">{{ (frete.get('valorTotalDolares', 0) or 0)|to_float|format_currency_usd if frete else '0,00' }}</td>
+        </tr>
+        <tr>
+          <td><strong>Seguro:</strong> {{ moeda_seguro|get_moeda_nome }}</td>
+          <td class="valor-currency">{{ (seguro.get('valorTotalDolares', 0) or 0)|to_float|format_currency_usd if seguro else '0,00' }}</td>
+        </tr>
+        <tr>
+          <td><strong>VMLE:</strong> {{ moeda_vmle|get_moeda_nome }}</td>
+          <td class="valor-currency">{{ (valor_embarque.get('totalDolares', 0) or 0)|to_float|format_currency_usd if valor_embarque else '0,00' }}</td>
+        </tr>
+        <tr>
+          <td><strong>VMLD:</strong> {{ moeda_vmld|get_moeda_nome }}</td>
+          <td class="valor-currency">{{ (valor_descarga.get('totalDolares', 0) or 0)|to_float|format_currency_usd if valor_descarga else '0,00' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% set pagamentos = di.get('pagamentos', []) %}
+{% if pagamentos %}
+<div class="section">
+  <div class="section-title">Tributos</div>
+  <div class="section-content">
+    <table class="tributos-table">
+      <thead>
+        <tr>
+          <th>Tributo</th>
+          <th>Suspenso</th>
+          <th>Recolhido</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set ii_total = [0.0] %}
+        {% set ipi_total = [0.0] %}
+        {% set pis_total = [0.0] %}
+        {% set cofins_total = [0.0] %}
+        {% set antidumping_total = [0.0] %}
+        {% set taxa_siscomex_total = [0.0] %}
+        {% for pag in pagamentos %}
+          {% set codigo_receita = pag.get('codigoReceita', '')|string %}
+          {% set nome_receita = pag.get('nomeReceita', '')|string %}
+          {% set valor_total = (pag.get('valorTotal', 0) or 0)|to_float %}
+          
+          {# ✅ Mapeamento de códigos numéricos para impostos #}
+          {# 0086 - IMPOSTO DE IMPORTAÇÃO #}
+          {% if codigo_receita == '0086' or codigo_receita == '86' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if ii_total.append(ii_total.pop(0) + valor_float) %}{% endif %}
+          {# 1038 - IPI #}
+          {% elif codigo_receita == '1038' or codigo_receita == '38' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if ipi_total.append(ipi_total.pop(0) + valor_float) %}{% endif %}
+          {# 5602 - PIS/PASEP IMPORTAÇÃO #}
+          {% elif codigo_receita == '5602' or codigo_receita == '602' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if pis_total.append(pis_total.pop(0) + valor_float) %}{% endif %}
+          {# 5629 - COFINS IMPORTAÇÃO #}
+          {% elif codigo_receita == '5629' or codigo_receita == '629' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if cofins_total.append(cofins_total.pop(0) + valor_float) %}{% endif %}
+          {# 5529 - ANTIDUMPING #}
+          {% elif codigo_receita == '5529' or codigo_receita == '529' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if antidumping_total.append(antidumping_total.pop(0) + valor_float) %}{% endif %}
+          {# 7811 - TAXA DE UTILIZAÇÃO DO SISCOMEX #}
+          {% elif codigo_receita == '7811' or codigo_receita == '811' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if taxa_siscomex_total.append(taxa_siscomex_total.pop(0) + valor_float) %}{% endif %}
+          {# Fallback: tentar por nome (caso venha preenchido) #}
+          {% elif 'IMPOSTO DE IMPORTAÇÃO' in nome_receita.upper() or codigo_receita == 'II' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if ii_total.append(ii_total.pop(0) + valor_float) %}{% endif %}
+          {% elif 'IMPOSTO SOBRE PRODUTOS INDUSTRIALIZADOS' in nome_receita.upper() or codigo_receita == 'IPI' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if ipi_total.append(ipi_total.pop(0) + valor_float) %}{% endif %}
+          {% elif 'PIS' in nome_receita.upper() and 'PASEP' in nome_receita.upper() or codigo_receita == 'PIS' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if pis_total.append(pis_total.pop(0) + valor_float) %}{% endif %}
+          {% elif 'COFINS' in nome_receita.upper() or codigo_receita == 'COFINS' %}
+            {% set valor_float = valor_total|to_float %}
+            {% if cofins_total.append(cofins_total.pop(0) + valor_float) %}{% endif %}
+          {% elif 'ANTIDUMPING' in nome_receita.upper() %}
+            {% set valor_float = valor_total|to_float %}
+            {% if antidumping_total.append(antidumping_total.pop(0) + valor_float) %}{% endif %}
+          {% endif %}
+        {% endfor %}
+        
+        <tr>
+          <td><strong>I.I.:</strong></td>
+          <td class="valor-currency">0,00</td>
+          <td class="valor-currency">{{ ii_total[0]|format_currency }}</td>
+        </tr>
+        <tr>
+          <td><strong>I.P.I.:</strong></td>
+          <td class="valor-currency">0,00</td>
+          <td class="valor-currency">{{ ipi_total[0]|format_currency }}</td>
+        </tr>
+        <tr>
+          <td><strong>Pis/Pasep:</strong></td>
+          <td class="valor-currency">0,00</td>
+          <td class="valor-currency">{{ pis_total[0]|format_currency }}</td>
+        </tr>
+        <tr>
+          <td><strong>Cofins:</strong></td>
+          <td class="valor-currency">0,00</td>
+          <td class="valor-currency">{{ cofins_total[0]|format_currency }}</td>
+        </tr>
+        <tr>
+          <td><strong>Direitos Antidumping:</strong></td>
+          <td class="valor-currency">0,00</td>
+          <td class="valor-currency">{{ antidumping_total[0]|format_currency }}</td>
+        </tr>
+        <tr>
+          <td><strong>Taxa de Utilização do SISCOMEX:</strong></td>
+          <td class="valor-currency">0,00</td>
+          <td class="valor-currency">{{ taxa_siscomex_total[0]|format_currency }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% if dados_despacho.get('dataHoraDesembaraco') %}
+<div class="section">
+  <div class="info-line">
+    <span class="info-label">Data da Emissão:</span> __/__/____ ________________________________________
+  </div>
+  <div class="info-line">
+    <span class="info-label">Assinatura do Representante</span>
+  </div>
+</div>
+{% endif %}
+
+{# ✅ NOVO (26/01/2026): Numeração no rodapé da página 1 (igual PDF oficial) #}
+<div style="text-align: center; font-size: 8pt; margin-top: 20px; page-break-after: always;">
+  -- 1 of 5 --
+</div>
+
+<div class="page-break"></div>
+
+<div class="section">
+  <div class="section-title">Dados Complementares</div>
+  <div class="section-content">
+    {% if di.get('despachantesAduaneiros') %}
+    <div class="info-line"><strong>DESPACHANTES ADUANEIROS</strong></div>
+    {% for desp in di.get('despachantesAduaneiros', []) %}
+    <div class="info-line">
+      - {{ desp.get('nome', '—') }} - REG: {{ desp.get('registro', '—') }} - CPF: {{ desp.get('cpf', '—') }}
+    </div>
+    {% endfor %}
+    <div class="info-line" style="margin-top: 8px;">
+      AUTORIZAMOS OS SENHORES A RETIRAR AS MERCADORIAS CONSTANTES DA PRESENTE D.I.
+    </div>
+    {% endif %}
+    
+    {% if processo_referencia %}
+    <div class="info-line" style="margin-top: 8px;">
+      <span class="info-label">Número do Processo:</span> {{ processo_referencia }}
+    </div>
+    {% endif %}
+    
+    {% if di.get('documentosInstrucaoDespacho') %}
+      {% for doc in di.get('documentosInstrucaoDespacho', []) %}
+        {% if doc.get('codigoTipoDocumentoDespacho') == '01' %}
+        <div class="info-line">
+          <span class="info-label">FATURA COMERCIAL:</span> {{ doc.get('numeroDocumentoDespacho', '—') }}
+        </div>
+        {% elif doc.get('codigoTipoDocumentoDespacho') == '02' %}
+        <div class="info-line">
+          <span class="info-label">ROMANEIO DE CARGA:</span> {{ doc.get('numeroDocumentoDespacho', '—') }}
+        </div>
+        {% elif doc.get('codigoTipoDocumentoDespacho') == '03' %}
+        <div class="info-line">
+          <span class="info-label">CONHECIMENTO DE CARGA:</span> {{ doc.get('numeroDocumentoDespacho', '—') }}
+        </div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+    
+    {% if basico_carga %}
+      {% set conhecimento_dados = safe_dict(basico_carga.get('conhecimentoCarga', {})) %}
+      {% if conhecimento_dados %}
+      <div class="info-line">
+        <span class="info-label">Data do Embarque:</span> {{ conhecimento_dados.get('dataEmbarque', '—') }}
+      </div>
+      <div class="info-line">
+        <span class="info-label">CE Mercante:</span> {{ conhecimento_dados.get('idConhecimento', '—') }}
+      </div>
+      <div class="info-line">
+        <span class="info-label">Manifesto de Carga:</span> {{ conhecimento_dados.get('idConhecimento', '—') }}
+      </div>
+      <div class="info-line">
+        <span class="info-label">Local de Embarque:</span> {{ conhecimento_dados.get('localEmbarque', '—') }}
+      </div>
+      {% endif %}
+    {% endif %}
+    
+    {% set transporte = safe_dict(di.get('transporte', {})) %}
+    {% if transporte.get('nomeVeiculo') %}
+    <div class="info-line">
+      <span class="info-label">Navio:</span> {{ transporte.get('nomeVeiculo', '—') }}
+    </div>
+    {% endif %}
+    
+    {% if carga and carga.get('embalagens') %}
+    <div class="info-line">
+      <span class="info-label">Volume:</span> 
+      {% set total_volume = [0.0] %}
+      {% for emb in carga.get('embalagens', []) %}
+        {% set qtd_vol = (emb.get('quantidadeVolume', 0) or 0)|to_float %}
+        {% if total_volume.append(total_volume.pop(0) + qtd_vol) %}{% endif %}
+      {% endfor %}
+      {{ total_volume[0]|int }}
+    </div>
+    {% endif %}
+    
+    {% if basico_carga.get('dataChegada') %}
+    <div class="info-line">
+      <span class="info-label">Data da Chegada:</span> {{ basico_carga.get('dataChegada', '—') }}
+    </div>
+    {% endif %}
+    
+    {% if valor_embarque %}
+    <div class="info-line">
+      <span class="info-label">FOB:</span> US$ {{ "%.2f"|format((valor_embarque.get('totalDolares', 0) or 0)|to_float) }} / R$ {{ (valor_embarque.get('totalReais', 0) or 0)|to_float|format_currency }}
+    </div>
+    {% endif %}
+    
+    {% if frete %}
+    <div class="info-line">
+      <span class="info-label">FRETE:</span> US$ {{ "%.2f"|format((frete.get('valorTotalDolares', 0) or 0)|to_float) }} / R$ {{ (frete.get('totalReais', 0) or 0)|to_float|format_currency }}
+    </div>
+    {% endif %}
+    
+    {% if valor_descarga %}
+    <div class="info-line">
+      <span class="info-label">VMLD (CIF):</span> US$ {{ "%.2f"|format((valor_descarga.get('totalDolares', 0) or 0)|to_float) }} / R$ {{ (valor_descarga.get('totalReais', 0) or 0)|to_float|format_currency }}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% set adicoes = di.get('adicoes', []) %}
+{% if adicoes %}
+  {% for adicao in adicoes %}
+    {% set num_adicao = adicao.get('numeroAdicao', loop.index) %}
+    <div class="section page-break">
+      <div class="section-title">Adição: {{ "%03d"|format(num_adicao|int) }}</div>
+      
+      {% set exportador = safe_dict(adicao.get('exportador', {})) %}
+      {% set fabricante = safe_dict(adicao.get('fabricante', {})) %}
+      {% if exportador or fabricante %}
+      <div class="section-content">
+        <div class="section-title" style="margin-top: 8px;">Exportador/Fabricante/Produtor</div>
+        <div class="info-line">
+          <span class="info-label">Nome:</span> {{ exportador.get('nomeExportador', fabricante.get('nomeFabricante', '—')) }}
+        </div>
+        <div class="info-line">
+          <span class="info-label">País de Origem:</span> {{ exportador.get('pais', {}).get('codigo', fabricante.get('pais', {}).get('codigo', '—')) }}
+        </div>
+      </div>
+      {% endif %}
+      
+      {% set mercadoria = safe_dict(adicao.get('mercadoria', {})) %}
+      {% if mercadoria %}
+      <div class="section-content">
+        <div class="section-title" style="margin-top: 8px;">Classificação Tarifária</div>
+        <div class="info-line">
+          <span class="info-label">NCM</span> {{ mercadoria.get('codigoNCM', '—') }} - {{ mercadoria.get('descricaoMercadoria', '—') }}
+        </div>
+        <div class="info-line">
+          <span class="info-label">NBM</span> {{ mercadoria.get('codigoNBM', mercadoria.get('codigoNCM', '—')) }}
+        </div>
+      </div>
+      {% endif %}
+      
+      {% set condicao_venda = safe_dict(adicao.get('condicaoVenda', {})) %}
+      {% if condicao_venda %}
+      <div class="section-content">
+        <div class="section-title" style="margin-top: 8px;">Condição de Venda</div>
+        {% set incoterm = safe_dict(condicao_venda.get('incoterm', {})) %}
+        <div class="info-line">
+          <span class="info-label">INCOTERM:</span> {{ incoterm.get('codigo', '—') }} - {{ incoterm.get('descricao', '—') }}
+        </div>
+        <div class="info-line">
+          <span class="info-label">VCMV:</span> {{ (condicao_venda.get('valorCondicaoVendaMoedaNegociada', 0) or 0)|to_float|format_currency }}
+        </div>
+        {% if mercadoria %}
+        <div class="info-line">
+          <span class="info-label">Peso Líquido da Adição:</span> {{ "%.5f"|format((mercadoria.get('pesoLiquido', 0) or 0)|to_float) }} Kg
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+      
+      {% if mercadoria %}
+      <div class="section-content">
+        <div class="section-title" style="margin-top: 8px;">Descrição Detalhada da Mercadoria</div>
+        <div class="info-line">
+          <span class="info-label">Qtde:</span> {{ "%.5f"|format((mercadoria.get('quantidadeComercial', 0) or 0)|to_float) }} {{ mercadoria.get('codigoUnidadeComercial', '—') }}
+        </div>
+        <div class="info-line">
+          <span class="info-label">VUCV:</span> {{ (mercadoria.get('valorUnitarioMoedaNegociada', 0) or 0)|to_float|format_currency }} {{ mercadoria.get('moedaNegociada', {}).get('codigo', '—') }}
+        </div>
+        <div class="info-line" style="margin-top: 4px;">
+          {{ mercadoria.get('descricaoMercadoria', '—') }}
+        </div>
+      </div>
+      {% endif %}
+      
+      {% set tributos_adicao = adicao.get('tributos', []) %}
+      {% if tributos_adicao %}
+        {% for tributo_item in tributos_adicao %}
+          {% set tributo = safe_dict(tributo_item.get('tributo', {})) %}
+          {% set codigo_tributo = tributo.get('codigo', '') %}
+          
+          {% if codigo_tributo == 'II' %}
+          <div class="section-content">
+            <div class="section-title" style="margin-top: 8px;">Imposto de Importação</div>
+            <div class="info-line">
+              <span class="info-label">Regime de Tributação:</span> {{ tributo_item.get('regime', {}).get('codigo', 'RECOLHIMENTO INTEGRAL') }}
+            </div>
+            <div class="info-line">
+              <span class="info-label">Alíquota AdValorem (TEC):</span> {{ "%.2f"|format((tributo_item.get('aliquotaAdValorem', 0) or 0)|to_float) }}%
+            </div>
+            <div class="info-line">
+              <span class="info-label">Valor a Recolher:</span> {{ (tributo_item.get('valorARecolher', 0) or 0)|to_float|format_currency }}
+            </div>
+          </div>
+          {% elif codigo_tributo == 'IPI' %}
+          <div class="section-content">
+            <div class="section-title" style="margin-top: 8px;">Imposto sobre Produtos Industrializados</div>
+            <div class="info-line">
+              <span class="info-label">Regime de Tributação:</span> {{ tributo_item.get('regime', {}).get('codigo', 'RECOLHIMENTO INTEGRAL') }}
+            </div>
+            <div class="info-line">
+              <span class="info-label">Alíquota Advalorem (TIPI)</span> {{ "%.2f"|format((tributo_item.get('aliquotaAdValorem', 0) or 0)|to_float) }}%
+            </div>
+            <div class="info-line">
+              <span class="info-label">Valor a Recolher:</span> {{ (tributo_item.get('valorARecolher', 0) or 0)|to_float|format_currency }}
+            </div>
+          </div>
+          {% elif codigo_tributo in ['PIS', 'PASEP'] %}
+          <div class="section-content">
+            <div class="section-title" style="margin-top: 8px;">Dados Gerais Pis e Cofins</div>
+            <div class="info-line">
+              <span class="info-label">Base de Cálculo:</span> {{ (tributo_item.get('baseCalculo', 0) or 0)|to_float|format_currency }}
+            </div>
+            <div class="info-line">
+              <span class="info-label">Percentual de Redução da base de Cálculo:</span> {{ "%.2f"|format((tributo_item.get('percentualReducao', 0) or 0)|to_float) }}%
+            </div>
+            <div class="info-line">
+              <span class="info-label">Regime de Tributação:</span> {{ tributo_item.get('regime', {}).get('codigo', 'REDUCAO') }}
+            </div>
+            
+            <div class="section-title" style="margin-top: 8px;">Pis/Pasep</div>
+            <div class="info-line">
+              <span class="info-label">Alíquota AdValorem:</span> {{ "%.2f"|format((tributo_item.get('aliquotaAdValorem', 0) or 0)|to_float) }}%
+            </div>
+            <div class="info-line">
+              <span class="info-label">Valor Devido:</span> {{ (tributo_item.get('valorDevido', 0) or 0)|to_float|format_currency }}
+            </div>
+            <div class="info-line">
+              <span class="info-label">Valor a Recolher:</span> {{ (tributo_item.get('valorARecolher', 0) or 0)|to_float|format_currency }}
+            </div>
+          </div>
+          {% elif codigo_tributo == 'COFINS' %}
+          <div class="section-content">
+            <div class="section-title" style="margin-top: 8px;">Cofins</div>
+            <div class="info-line">
+              <span class="info-label">Alíquota AdValorem:</span> {{ "%.2f"|format((tributo_item.get('aliquotaAdValorem', 0) or 0)|to_float) }}%
+            </div>
+            <div class="info-line">
+              <span class="info-label">Valor Devido:</span> {{ (tributo_item.get('valorDevido', 0) or 0)|to_float|format_currency }}
+            </div>
+            <div class="info-line">
+              <span class="info-label">Valor a Recolher:</span> {{ (tributo_item.get('valorARecolher', 0) or 0)|to_float|format_currency }}
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      
+      {% if adicao.get('numeroLI') %}
+      <div class="section-content">
+        <div class="info-line" style="margin-top: 8px;">
+          <span class="info-label">$N^{\circ}$ do LI:</span> {{ adicao.get('numeroLI', '—') }}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% endif %}
+
+{% if di.get('alertasErros') %}
+<div class="section">
+  <div class="section-title">Alertas e Erros</div>
+  <div class="section-content">
+    <div class="info-line">
+      <strong>I - Erros Impeditivos</strong> <strong>NI - Erros Não Impeditivos</strong> <strong>A - Alertas</strong>
+    </div>
+    <table class="alertas-table">
+      <thead>
+        <tr>
+          <th>Adição</th>
+          <th>Tipo</th>
+          <th>Mensagem</th>
+          <th>Linha</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for alerta in di.get('alertasErros', []) %}
+        <tr>
+          <td>{{ alerta.get('numeroAdicao', '000') }}</td>
+          <td>{{ alerta.get('tipo', '—') }}</td>
+          <td>{{ alerta.get('mensagem', '—') }}</td>
+          <td>{{ alerta.get('linha', '—') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+</body>
+</html>

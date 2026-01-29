@@ -1,0 +1,22 @@
+{
+  "name": "chat-ia-independente",
+  "version": "1.0.0",
+  "description": "Chat IA Independente - Dependências Node.js para SQL Server adapter",
+  "main": "utils/sql_server_node.js",
+  "scripts": {
+    "test-sql": "node utils/sql_server_node.js test",
+    "install-deps": "npm install"
+  },
+  "keywords": [
+    "sql-server",
+    "nodejs",
+    "adapter"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mssql": "^12.1.1",
+    "dotenv": "^16.0.0"
+  }
+}
+

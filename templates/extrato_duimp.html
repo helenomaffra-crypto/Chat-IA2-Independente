@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Extrato da DUIMP</title>
+<style>
+  @page { 
+    size: A4; 
+    margin: 1.5cm 1.2cm; 
+  }
+  body { 
+    font-family: 'DejaVu Sans', Arial, sans-serif; 
+    font-size: 9pt; 
+    color:#000; 
+    line-height: 1.4;
+  }
+  h1,h2,h3 { 
+    margin: 0; 
+    padding: 0; 
+  }
+  .title { 
+    text-align:center; 
+    font-size:11pt; 
+    font-weight:bold;
+    margin-bottom:10px; 
+    padding: 8px 0;
+  }
+  .section { 
+    border:1px solid #333; 
+    margin:8px 0 10px 0; 
+  }
+  .section-title { 
+    background:#1a1a1a;
+    color:#fff;
+    padding:4px 8px; 
+    font-weight:bold; 
+    font-size:9pt;
+  }
+  .section-body { 
+    padding:8px; 
+  }
+  table { 
+    width:100%; 
+    border-collapse: collapse; 
+    margin-top:4px; 
+    font-size:9pt;
+  }
+  th, td { 
+    border:1px solid #888; 
+    padding:4px; 
+    vertical-align:top; 
+  }
+  th { 
+    background:#d3d3d3; 
+    text-align:left; 
+    font-weight:bold;
+    font-size:8pt;
+  }
+  .kv { 
+    border: none;
+  }
+  .kv td { 
+    border:0; 
+    padding:3px 6px; 
+  }
+  .kv td:first-child { 
+    font-weight:bold;
+    width: 50%;
+  }
+  .kv td:last-child {
+    color: #000;
+  }
+  .muted { 
+    color:#555; 
+    font-size:8pt;
+    margin-top: 4px;
+  }
+  .totals { 
+    font-weight: bold; 
+    font-size: 10pt;
+    background:#e8e8e8;
+  }
+  .totals th {
+    background:#c9c9c9;
+    font-size:9pt;
+  }
+  .sub-section {
+    margin: 4px 0;
+    border: 1px solid #ccc;
+  }
+  .sub-section .section-title {
+    background:#4a4a4a;
+    font-size: 8pt;
+    padding: 2px 6px;
+  }
+  .sub-section .section-body {
+    padding: 5px;
+  }
+</style>
+</head>
+<body>
+
+{% set ident = safe_dict(duimp.get('identificacao', {})) %}
+{% set numero = ident.get('numero', 'N/A') %}
+{% set versao = ident.get('versao', 'N/A') %}
+
+<div style="text-align:center; margin-bottom:15px;">
+  <div style="font-size:10pt; font-weight:bold; margin-bottom:8px;">MINISTÉRIO DA FAZENDA</div>
+  <div style="font-size:9pt; margin-bottom:2px;">SECRETARIA DA RECEITA FEDERAL DO BRASIL</div>
+  <div style="font-size:8pt; margin-bottom:8px;">Superintendência Regional da Receita Federal</div>
+  <div style="font-size:11pt; font-weight:bold; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 8px 0; margin-top:8px;">
+    EXTRATO DA DUIMP - {{ numero }}
+  </div>
+  <div style="font-size:9pt; margin-top:4px;">
+    Versão: {{ "%04d"|format(versao|int) if versao|string|length>0 and versao is number else versao }}
+    {% if processo_referencia %}
+    <br>Processo: {{ processo_referencia }}
+    {% endif %}
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Situação Geral</div>
+  <div class="section-body">
+    {% set situacao = safe_dict(duimp.get('situacao', {})) %}
+    {% set resultado = safe_dict(duimp.get('resultadoAnaliseRisco', {})) %}
+    <table class="kv">
+      <tr><td><strong>Situação da DUIMP:</strong></td><td>{{ situacao.get('situacaoDuimp', '—') }}</td></tr>
+      <tr><td><strong>Canal único:</strong></td><td>{{ resultado.get('canalConsolidado', '—') }}</td></tr>
+      <tr><td><strong>Controle de carga:</strong></td><td>{{ situacao.get('controleCarga', '—') }}</td></tr>
+      <tr><td><strong>Situação do licenciamento:</strong></td><td>{{ situacao.get('situacaoLicenciamento', '—') }}</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Identificação</div>
+  <div class="section-body">
+    {% set importador = safe_dict(ident.get('importador', {})) %}
+    <table class="kv">
+      <tr><td><strong>Número:</strong></td><td>{{ numero }}</td></tr>
+      <tr><td><strong>Versão:</strong></td><td>{{ versao }}</td></tr>
+      <tr><td><strong>Importador (NI):</strong></td><td>{{ importador.get('ni', '—') }}</td></tr>
+    </table>
+    <p class="muted"><strong>Informação Complementar:</strong><br/>{{ ident.get('informacaoComplementar', '—') }}</p>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-title">Carga / Valores</div>
+  <div class="section-body">
+    <table class="kv">
+      <tr><td><strong>Identificação da Carga:</strong></td><td>
+        {% set cg = safe_dict(duimp.get('carga', {})) %}
+        {{ cg.get('tipoIdentificacaoCarga', '—') }} {{ cg.get('identificacao', '') }}
+      </td></tr>
+      {% set unidade = safe_dict(cg.get('unidadeDeclarada', {})) %}
+      <tr><td><strong>Unidade Declarada:</strong></td><td>{{ unidade.get('codigo', '—') }}</td></tr>
+      <tr><td><strong>Frete (moeda / valor):</strong></td><td>
+        {% set fr = safe_dict(cg.get('frete', {})) %}
+        {{ fr.get('codigoMoedaNegociada', '—') }} {{ (fr.get('valorMoedaNegociada', 0) or 0)|format_currency }}</td></tr>
+      <tr><td><strong>Seguro (moeda / valor):</strong></td><td>
+        {% set sg = safe_dict(cg.get('seguro', {})) %}
+        {% if sg.get('codigoMoedaNegociada') %}
+          {{ sg.get('codigoMoedaNegociada', '—') }} {{ (sg.get('valorMoedaNegociada', 0) or 0)|format_currency }}
+        {% else %}
+          —
+        {% endif %}
+      </td></tr>
+    </table>
+  </div>
+</div>
+
+{% set vc = safe_dict(duimp.get('tributos')) or safe_dict(duimp.get('valoresCalculados')) %}
+{% if vc %}
+<div class="section">
+  <div class="section-title">Valores e Tributos (DUIMP)</div>
+  <div class="section-body">
+    {% set mercadoria_vc = safe_dict(vc.get('mercadoria', {})) %}
+    <table class="kv">
+      <tr><td><strong>Valor FOB (USD):</strong></td>
+          <td>{{ (mercadoria_vc.get('valorTotalLocalEmbarqueUSD', 0) or 0)|format_currency }}</td></tr>
+      <tr><td><strong>Valor FOB (BRL):</strong></td>
+          <td>{{ (mercadoria_vc.get('valorTotalLocalEmbarqueBRL', 0) or 0)|format_currency }}</td></tr>
+    </table>
+
+    {% set tribs = vc.get('tributosCalculados', []) %}
+    {% if tribs %}
+      <table>
+        <thead><tr><th>Tributo</th><th>Valor a Recolher (BRL)</th></tr></thead>
+        <tbody>
+        {% set tot_global = [0.0] %}
+        {% for t in tribs %}
+          {% set valoresBRL = safe_dict(t.get('valoresBRL', {}) or {}) %}
+          {% set arec = (valoresBRL.get('aRecolher') or 0.0)|float %}
+          {% if tot_global.append(tot_global.pop(0) + arec) %}{% endif %}
+          <tr>
+            <td>{{ t.get('tipo', '—') }}</td>
+            <td style="text-align:right">{{ arec|format_currency }}</td>
+          </tr>
+        {% endfor %}
+          <tr class="totals"><th>Total</th><th style="text-align:right">{{ tot_global[0]|format_currency }}</th></tr>
+        </tbody>
+      </table>
+    {% else %}
+      <p class="muted">Nenhum tributo calculado informado para a DUIMP.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% if duimp.get('items_details') %}
+  {% for item in duimp.get('items_details') %}
+    <div class="section">
+      {% set itemIdent = safe_dict(item.get('identificacao', {})) %}
+      <div class="section-title">Item {{ "%05d"|format(itemIdent.get('numeroItem', 0) or 0) }}</div>
+      <div class="section-body">
+
+        <div class="sub-section">
+          <div class="section-title">Dados do Produto</div>
+          <div class="section-body">
+            <table class="kv">
+              {% set produto = safe_dict(item.get('produto', {})) %}
+              {% set mercadoria = safe_dict(item.get('mercadoria', {})) %}
+              <tr><td><strong>NCM:</strong></td><td>{{ produto.get('ncm', '—') }}</td></tr>
+              <tr><td><strong>Descrição:</strong></td><td>{{ mercadoria.get('descricao', '—') }}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <div class="section-title">Fabricante / Produtor</div>
+          <div class="section-body">
+            {% set fab = safe_dict(item.get('fabricante', {})) %}
+            {% set paisFab = safe_dict(fab.get('pais', {})) %}
+            <table class="kv">
+              <tr><td><strong>Código do Fabricante:</strong></td><td>{{ fab.get('codigo', '—') }}</td></tr>
+              <tr><td><strong>País:</strong></td><td>{{ paisFab.get('codigo', '—') }}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <div class="section-title">Exportador</div>
+          <div class="section-body">
+            {% set exp = safe_dict(item.get('exportador', {})) %}
+            {% set paisExp = safe_dict(exp.get('pais', {})) %}
+            {% set indicador = safe_dict(item.get('indicadorExportadorFabricante', {})) %}
+            {% set indicadorComprador = safe_dict(item.get('indicadorCompradorVendedor', {})) %}
+            <table class="kv">
+              <tr><td><strong>Relação Exportador/Fabricante:</strong></td><td>{{ indicador.get('codigo', '—') }}</td></tr>
+              <tr><td><strong>Vinculação comprador/vendedor:</strong></td><td>{{ indicadorComprador.get('codigo', '—') }}</td></tr>
+              <tr><td><strong>Código do Exportador:</strong></td><td>{{ exp.get('codigo', '—') }}</td></tr>
+              <tr><td><strong>País:</strong></td><td>{{ paisExp.get('codigo', '—') }}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="sub-section">
+          <div class="section-title">Dados da Mercadoria</div>
+          <div class="section-body">
+            {% set m = safe_dict(item.get('mercadoria', {})) %}
+            {% set condicaoVenda = safe_dict(item.get('condicaoVenda', {})) %}
+            {% set moeda = safe_dict(m.get('moedaNegociada', {})) %}
+            <table class="kv">
+              <tr><td><strong>Condição:</strong></td><td>{{ m.get('condicao', '—') }}</td></tr>
+              <tr><td><strong>Quantidade:</strong></td><td>{{ m.get('quantidadeComercial', '—') }}</td></tr>
+              <tr><td><strong>Peso líquido (kg):</strong></td><td>{{ m.get('pesoLiquido', '—') }}</td></tr>
+              <tr><td><strong>Moeda negociada:</strong></td><td>{{ moeda.get('codigo', '—') }}</td></tr>
+              <tr><td><strong>Valor unitário (moeda negociada):</strong></td><td>{{ (m.get('valorUnitarioMoedaNegociada') or 0)|format_currency }}</td></tr>
+              <tr><td><strong>Valor total (moeda negociada):</strong></td><td>{{ (condicaoVenda.get('valorMoedaNegociada') or 0)|format_currency }}</td></tr>
+              <tr><td><strong>Valor total (BRL):</strong></td><td>{{ (condicaoVenda.get('valorBRL') or 0)|format_currency }}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        {% set tributos = safe_dict(item.get('tributos')) %}
+        {% if tributos and tributos.get('tributosCalculados') %}
+          <div class="sub-section">
+            <div class="section-title">Tributos do Item</div>
+            <div class="section-body">
+              <table>
+                <thead><tr><th>Tributo</th><th>Valor a Recolher (BRL)</th></tr></thead>
+                <tbody>
+                  {% set totItem_global = [0.0] %}
+                  {% for t in tributos.get('tributosCalculados') %}
+                    {% set valoresBRL_item = safe_dict(t.get('valoresBRL', {}) or {}) %}
+                    {% set arec = (valoresBRL_item.get('aRecolher') or 0.0)|float %}
+                    {% if totItem_global.append(totItem_global.pop(0) + arec) %}{% endif %}
+                    <tr><td>{{ t.get('tipo', '—') }}</td><td style="text-align:right">{{ arec|format_currency }}</td></tr>
+                  {% endfor %}
+                  <tr class="totals"><th>Total</th><th style="text-align:right">{{ totItem_global[0]|format_currency }}</th></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {% endif %}
+
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <p class="muted">Nenhum item detalhado retornado.</p>
+{% endif %}
+
+</body>
+</html>

@@ -1,0 +1,10 @@
+backups/
+downloads/
+.secure/
+chat_ia.db
+legislacao_files/
+nesh_chunks.json
+__pycache__/
+*.pyc
+*.mp3
+*.pdf

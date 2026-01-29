@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Extrato Bancário</title>
+<style>
+  @page { 
+    size: A4 landscape; 
+    margin: 1.2cm 1cm; 
+  }
+  body { 
+    font-family: 'DejaVu Sans', Arial, sans-serif; 
+    font-size: 8pt; 
+    color: #000; 
+    line-height: 1.2;
+    margin: 0;
+    padding: 0;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .header-title {
+    font-size: 12pt;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  .header-subtitle {
+    font-size: 9pt;
+    margin-bottom: 2px;
+  }
+  .header-main {
+    font-size: 11pt;
+    font-weight: bold;
+    border-top: 2px solid #000;
+    border-bottom: 2px solid #000;
+    padding: 6px 0;
+    margin-top: 6px;
+    margin-bottom: 6px;
+  }
+  .info-line {
+    margin: 2px 0;
+    font-size: 8pt;
+  }
+  .info-label {
+    font-weight: bold;
+    display: inline-block;
+    min-width: 100px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 8pt;
+    table-layout: fixed;
+  }
+  th, td {
+    border: 1px solid #000;
+    padding: 4px 5px;
+    text-align: left;
+    vertical-align: middle;
+    overflow: hidden;
+  }
+  th {
+    background: #e0e0e0;
+    font-weight: bold;
+    text-align: center;
+    font-size: 7pt;
+    padding: 4px 3px;
+  }
+  .col-data {
+    width: 10%;
+    text-align: center;
+    word-wrap: break-word;
+  }
+  .col-historico {
+    width: 42%;
+    text-align: left;
+    word-wrap: break-word;
+  }
+  .col-credito {
+    width: 16%;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .col-debito {
+    width: 16%;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .col-saldo {
+    width: 16%;
+    text-align: right;
+    font-weight: bold;
+    white-space: nowrap;
+  }
+  .valor-currency {
+    text-align: right;
+    white-space: nowrap;
+    font-family: 'Courier New', monospace;
+  }
+  .historico-texto {
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    line-height: 1.4;
+    font-size: 7.5pt;
+  }
+  .debito-vermelho {
+    color: #d32f2f;
+    font-weight: bold;
+  }
+  .total-row {
+    font-weight: bold;
+    background: #f0f0f0;
+    border-top: 2px solid #000;
+  }
+  .total-row td {
+    border-top: 2px solid #000;
+    padding: 5px 4px;
+  }
+  .empty-cell {
+    border: none !important;
+    background: transparent !important;
+  }
+  .page-break {
+    page-break-before: always;
+  }
+  .footer {
+    margin-top: 10px;
+    font-size: 7pt;
+    text-align: center;
+    color: #666;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-title">EXTRATO BANCÁRIO</div>
+    <div class="header-subtitle">{{ banco }}</div>
+    <div class="header-main">
+      Agência: {{ agencia }} | Conta: {{ conta }}
+    </div>
+  </div>
+
+  <div class="info-line">
+    <span class="info-label">Período:</span> {{ data_inicio }} a {{ data_fim }}
+  </div>
+  {% if saldo_inicial is defined and saldo_inicial is not none and saldo_inicial != 0 %}
+  <div class="info-line">
+    {% set saldo_i = saldo_inicial %}
+    {% if saldo_i is none %}{% set saldo_i = 0 %}{% endif %}
+    <span class="info-label">Saldo Inicial:</span> R$ {{ "%.2f"|format(saldo_i|float)|replace(".", ",") }}
+  </div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th class="col-data">Data</th>
+        <th class="col-historico">Histórico</th>
+        <th class="col-credito">Crédito</th>
+        <th class="col-debito">Débito</th>
+        <th class="col-saldo">Saldo</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for lanc in lancamentos %}
+      <tr>
+        <td class="col-data" style="text-align: center; vertical-align: middle; padding: 4px 5px;">
+          {% if banco == "Banco do Brasil" %}
+            {% set data_int = lanc.get('dataLancamento', 0) %}
+            {% if data_int is none %}{% set data_int = 0 %}{% endif %}
+            {% if data_int and data_int != 0 %}
+              {% set data_str = ("%08d"|format(data_int|int)) %}
+              {{ data_str[0:2] }}/{{ data_str[2:4] }}/{{ data_str[4:8] }}
+            {% else %}
+              &nbsp;
+            {% endif %}
+          {% else %}
+            {% set data_str = lanc.get('transactionDate', '') %}
+            {% if data_str %}
+              {% if 'T' in data_str %}
+                {% set data_str = data_str.split('T')[0] %}
+              {% endif %}
+              {% set dt = data_str.split('-') %}
+              {{ dt[2] }}/{{ dt[1] }}/{{ dt[0] }}
+            {% else %}
+              &nbsp;
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="col-historico historico-texto">
+          {% if banco == "Banco do Brasil" %}
+            {{ lanc.get('textoDescricaoHistorico', 'Sem descrição') }}
+            {% if lanc.get('textoInformacaoComplementar') %}
+              <br>{{ lanc.get('textoInformacaoComplementar') }}
+            {% endif %}
+            {% if lanc.get('processos_conciliados') %}
+              <br><strong>Processo:</strong> {{ lanc.get('processos_conciliados') }}
+            {% endif %}
+            {% if lanc.get('numeroCpfCnpjContrapartida') %}
+              <br>CPF/CNPJ: {{ lanc.get('numeroCpfCnpjContrapartida') }}
+            {% endif %}
+          {% else %}
+            {% set nome_transacao = lanc.get('transactionName', 'Sem descrição') %}
+            {{ nome_transacao }}
+            {% if lanc.get('historicComplement') %}
+              <br>{{ lanc.get('historicComplement') }}
+            {% endif %}
+            {% if lanc.get('processos_conciliados') %}
+              <br><strong>Processo:</strong> {{ lanc.get('processos_conciliados') }}
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="col-credito valor-currency" style="text-align: right; vertical-align: middle; padding: 4px 5px;">
+          {% if banco == "Banco do Brasil" %}
+            {% if lanc.get('indicadorSinalLancamento') == 'C' %}
+              {% set valor = lanc.get('valorLancamento', 0) %}
+              {% if valor is none %}{% set valor = 0 %}{% endif %}
+              R$ {{ "%.2f"|format(valor|float)|replace(".", ",") }}
+            {% else %}
+              &nbsp;
+            {% endif %}
+          {% else %}
+            {% set tipo_transacao = lanc.get('creditDebitType') or lanc.get('transactionType', '') %}
+            {% if tipo_transacao in ['CREDIT', 'CREDITO'] %}
+              {% set amount_obj = lanc.get('amount', {}) %}
+              {% set valor = 0 %}
+              {% if amount_obj is mapping %}
+                {% set valor = amount_obj.get('amount', 0) %}
+              {% elif amount_obj is iterable and amount_obj is not string and amount_obj is not mapping %}
+                {# Se for lista ou outro iterável (mas não dict), tentar pegar primeiro item #}
+                {% if amount_obj|length > 0 %}
+                  {% set primeiro = amount_obj[0] %}
+                  {% if primeiro is mapping %}
+                    {% set valor = primeiro.get('amount', 0) %}
+                  {% elif primeiro is number %}
+                    {% set valor = primeiro %}
+                  {% endif %}
+                {% endif %}
+              {% elif amount_obj is number %}
+                {% set valor = amount_obj %}
+              {% endif %}
+              {% if valor is none %}{% set valor = 0 %}{% endif %}
+              R$ {{ "%.2f"|format(valor|float)|replace(".", ",") }}
+            {% else %}
+              &nbsp;
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="col-debito valor-currency debito-vermelho" style="text-align: right; vertical-align: middle; padding: 4px 5px;">
+          {% if banco == "Banco do Brasil" %}
+            {% if lanc.get('indicadorSinalLancamento') == 'D' %}
+              {% set valor = lanc.get('valorLancamento', 0) %}
+              {% if valor is none %}{% set valor = 0 %}{% endif %}
+              R$ {{ "%.2f"|format(valor|float)|replace(".", ",") }}
+            {% else %}
+              &nbsp;
+            {% endif %}
+          {% else %}
+            {% set tipo_transacao = lanc.get('creditDebitType') or lanc.get('transactionType', '') %}
+            {% if tipo_transacao in ['DEBIT', 'DEBITO'] %}
+              {% set amount_obj = lanc.get('amount', {}) %}
+              {% set valor = 0 %}
+              {% if amount_obj is mapping %}
+                {% set valor = amount_obj.get('amount', 0) %}
+              {% elif amount_obj is iterable and amount_obj is not string and amount_obj is not mapping %}
+                {# Se for lista ou outro iterável (mas não dict), tentar pegar primeiro item #}
+                {% if amount_obj|length > 0 %}
+                  {% set primeiro = amount_obj[0] %}
+                  {% if primeiro is mapping %}
+                    {% set valor = primeiro.get('amount', 0) %}
+                  {% elif primeiro is number %}
+                    {% set valor = primeiro %}
+                  {% endif %}
+                {% endif %}
+              {% elif amount_obj is number %}
+                {% set valor = amount_obj %}
+              {% endif %}
+              {% if valor is none %}{% set valor = 0 %}{% endif %}
+              R$ {{ "%.2f"|format(valor|float)|replace(".", ",") }}
+            {% else %}
+              &nbsp;
+            {% endif %}
+          {% endif %}
+        </td>
+        <td class="col-saldo valor-currency" style="text-align: right; vertical-align: middle; padding: 4px 5px;">
+          {% set saldo = lanc.get('saldo_acumulado', 0) %}
+          {% if saldo is none %}{% set saldo = 0 %}{% endif %}
+          R$ {{ "%.2f"|format(saldo|float)|replace(".", ",") }}
+        </td>
+      </tr>
+      {% endfor %}
+      <tr class="total-row">
+        <td colspan="2" style="text-align: right; font-weight: bold; padding: 4px 5px; padding-right: 10px; border-right: 1px solid #000;">SALDO FINAL:</td>
+        <td style="padding: 4px 5px; border: 1px solid #000;">&nbsp;</td>
+        <td style="padding: 4px 5px; border: 1px solid #000;">&nbsp;</td>
+        <td class="col-saldo valor-currency" style="font-size: 9pt; padding: 4px 5px; border-left: 1px solid #000; text-align: right;">
+          {% set saldo_f = saldo_final %}
+          {% if saldo_f is none %}{% set saldo_f = 0 %}{% endif %}
+          R$ {{ "%.2f"|format(saldo_f|float)|replace(".", ",") }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    Gerado em {{ data_geracao }} | Total de lançamentos: {{ lancamentos|length }}
+  </div>
+</body>
+</html>
+

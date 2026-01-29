@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Ambiente virtual
+venv/
+env/
+ENV/
+
+# Banco de dados
+*.db
+*.sqlite
+*.sqlite3
+cpf_cnpj_cache.db  # Cache de consultas CPF/CNPJ
+
+# Logs
+*.log
+debug_log.txt
+
+# Arquivos de ambiente
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Executáveis
+*.exe
+*.app
+
+# Arquivos temporários
+*.tmp
+*.bak
+
+# Downloads e arquivos grandes
+downloads/
+*.pdf
+
+# Arquivos de legislação exportados para Assistants API
+legislacao_files/
+
+# Node modules (se houver)
+node_modules/
+
+# Arquivos de teste
+test_*.py
+corrigir_*.py
+auditar_*.py
+
+# ZIPs de build
+*.zip
+Chat-IA-*.zip
+
