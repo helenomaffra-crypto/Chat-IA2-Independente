@@ -7,3 +7,23 @@ backups/
 downloads/
 __pycache__/
 *.pyc
+
+# macOS / editor / node
+.DS_Store
+**/.DS_Store
+.vscode/
+node_modules/
+
+# bancos locais / caches
+*.db
+
+# diretórios sensíveis / privados
+.secure/
+
+# logs e artefatos locais
+debug_log.txt
+v2_logs.txt
+
+# uploads/arquivos locais grandes (se você quiser versionar isso, remova)
+legislacao_files/
+*.pdf
