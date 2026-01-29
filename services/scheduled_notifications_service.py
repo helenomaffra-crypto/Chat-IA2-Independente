@@ -130,12 +130,19 @@ class ScheduledNotificationsService:
 
         # ✅ NOVO (28/01/2026): Watch de vendas (Make/Spalla) - polling do "hoje" por termos
         if os.getenv("SALES_WATCH_ENABLED", "false").lower() == "true":
+            # ⚠️ Importante:
+            # - IntervalTrigger por padrão roda só depois de `interval`, então o usuário pode achar que "não funciona".
+            # - Rodar logo após iniciar o scheduler permite "seedar" baseline (sem notificar) e ficar pronto.
+            from datetime import datetime, timedelta
             self.scheduler.add_job(
                 func=self._watch_vendas_hoje,
                 trigger=IntervalTrigger(minutes=int(os.getenv("SALES_WATCH_INTERVAL_MINUTES", "15"))),
                 id="sales_watch_hoje",
                 name="Watch Vendas Hoje (Make/Spalla)",
                 replace_existing=True,
+                next_run_time=datetime.now() + timedelta(seconds=10),
+                coalesce=True,
+                max_instances=1,
             )
         
         logger.info("✅ Agendamentos de notificações configurados")
@@ -151,9 +158,15 @@ class ScheduledNotificationsService:
             if not termos:
                 return
 
+            debug = os.getenv("SALES_WATCH_DEBUG", "false").strip().lower() in {"1", "true", "yes", "y"}
+            if debug:
+                logger.info(f"🔎 [SALES_WATCH] Tick (termos={termos})")
+
             svc = SalesWatchService()
             results = svc.check_once(termos=termos)
             if not results:
+                if debug:
+                    logger.info("🔎 [SALES_WATCH] Tick sem novas NFs")
                 return
             created = svc.notificar(results)
             if created:

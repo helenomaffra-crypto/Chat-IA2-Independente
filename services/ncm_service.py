@@ -610,7 +610,16 @@ class NCMService:
             # ✅ MELHORIA: Tratamento de erros melhorado (continua sem web search se houver erro)
             contexto_web = None
             try:
-                contexto_web = self._buscar_web_para_produto(descricao)
+                # ✅ Performance/estabilidade: web-search é opcional (pode ser lento e rate-limited)
+                web_search_enabled = str(os.getenv("NCM_WEB_SEARCH_ENABLED", "false")).strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                    "y",
+                    "on",
+                )
+                if web_search_enabled:
+                    contexto_web = self._buscar_web_para_produto(descricao)
             except Exception as e:
                 logger.warning(f'⚠️ Erro ao buscar na web para "{descricao}" (continuando sem web search): {e}')
                 contexto_web = None  # Continuar sem web search se houver erro
@@ -748,12 +757,18 @@ class NCMService:
             # 3. Combinar descrição do NCM + NESH para validação
             
             import os
-            modelo_ncm = os.getenv('OPENAI_MODEL_CONHECIMENTO_GERAL', 'gpt-5.1')
-            logger.info(f'🤖 Usando modelo {modelo_ncm} para classificação de NCM (GPT-5 para melhor precisão)')
+            # ✅ Performance: permitir configurar modelo específico para NCM (default rápido)
+            modelo_ncm = (
+                os.getenv("NCM_CLASSIFICATION_MODEL")
+                or os.getenv("OPENAI_MODEL_ANALITICO")
+                or os.getenv("OPENAI_MODEL_CONHECIMENTO_GERAL")
+                or "gpt-4o-mini"
+            )
+            logger.info(f'🤖 Usando modelo {modelo_ncm} para classificação de NCM')
             resultado_ia = ai_service.sugerir_ncm_por_descricao(
                 descricao, 
                 contexto_ia if contexto_ia else None,
-                model=modelo_ncm  # ✅ GPT-5 para melhor classificação
+                model=modelo_ncm
             )
             
             # ✅ NOVO: Buscar NESH para o produto (fallback do fallback)

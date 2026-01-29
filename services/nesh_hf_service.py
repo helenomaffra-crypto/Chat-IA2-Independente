@@ -48,6 +48,7 @@ class NeshHfService:
 
         self._index = None
         self._meta: List[Dict[str, Any]] = []
+        self._embedder = None
 
     def _deps_available(self) -> bool:
         try:
@@ -119,7 +120,10 @@ class NeshHfService:
             import numpy as np
             from sentence_transformers import SentenceTransformer
 
-            model = SentenceTransformer(self.embed_model)
+            # ✅ Performance: cachear o modelo HF (evita reload a cada busca)
+            if self._embedder is None:
+                self._embedder = SentenceTransformer(self.embed_model)
+            model = self._embedder
             # e5: usar prefixos
             if "e5" in (self.embed_model or "").lower():
                 q = f"query: {q}"

@@ -771,6 +771,20 @@ ORDER BY t.TABLE_NAME;
         )
 
         where_venda = self._build_like_where("tds.TD_DES", like_venda)
+        # ✅ Regra de negócio: "Nacionalização por Conta Própria" NÃO é venda (é entrada/importação).
+        # Excluir direto no SQL para:
+        # - não aparecer no relatório
+        # - não contaminar percentuais (pct_no_periodo) e totais por centro/operação
+        #
+        # ⚠️ Importante: o texto pode vir com acento ("PRÓPRIA"), então forçamos collation CI_AI (case/accent-insensitive).
+        where_excluir = "1=1"
+        try:
+            where_excluir = (
+                "tds.TD_DES COLLATE Latin1_General_CI_AI NOT LIKE '%NACIONALIZ%CONTA%PROPR%' "
+                "AND tds.TD_DES COLLATE Latin1_General_CI_AI NOT LIKE '%CONTA%PROPR%'"
+            )
+        except Exception:
+            where_excluir = "1=1"
 
         # termo: preferir centro de custo (é onde normalmente aparece 'ALHO', 'RASTREADOR', etc.)
         where_termo = "1=1"
@@ -797,6 +811,7 @@ WITH base AS (
     WHERE d.data_emissao >= '{_escape_sql_literal(dt_ini)}'
       AND d.data_emissao <  '{_escape_sql_literal(dt_fim)}'
       AND {where_venda}
+      AND {where_excluir}
       AND {where_termo}
 ),
 agg AS (
@@ -1019,6 +1034,16 @@ ORDER BY a.periodo DESC, a.total_valor DESC;
         termo_tokens = _tokenize_search_terms(termo_raw)
 
         where_venda = self._build_like_where("tds.TD_DES", like_venda)
+        # ✅ Regra de negócio: "Nacionalização por Conta Própria" NÃO é venda (é entrada/importação).
+        # ⚠️ texto pode vir com acento ("PRÓPRIA") -> usar collation CI_AI.
+        where_excluir = "1=1"
+        try:
+            where_excluir = (
+                "tds.TD_DES COLLATE Latin1_General_CI_AI NOT LIKE '%NACIONALIZ%CONTA%PROPR%' "
+                "AND tds.TD_DES COLLATE Latin1_General_CI_AI NOT LIKE '%CONTA%PROPR%'"
+            )
+        except Exception:
+            where_excluir = "1=1"
         where_termo = "1=1"
         if termo_tokens:
             where_termo = self._build_where_termo_variants(
@@ -1187,6 +1212,7 @@ LEFT JOIN spalla.dbo.centro_custo cc
 WHERE d.data_emissao >= '{_escape_sql_literal(dt_ini)}'
   AND d.data_emissao <  '{_escape_sql_literal(dt_fim)}'
   AND {where_venda}
+  AND {where_excluir}
   AND {where_termo}
 ORDER BY d.data_emissao DESC, total_nf DESC;
 """.strip()

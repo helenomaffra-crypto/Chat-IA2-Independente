@@ -2,11 +2,50 @@
 
 **⚠️ IMPORTANTE:** Este prompt foi criado para ser **auto-suficiente**. Se você é um novo agente continuando este trabalho, leia TODO este documento antes de começar.
 
-**Data:** 21/01/2026  
-**Para:** 22/01/2026  
-**Última atualização:** 21/01/2026
+**Data:** 29/01/2026  
+**Para:** 30/01/2026  
+**Última atualização:** 29/01/2026
 
 ---
+
+## ✅ ATUALIZAÇÃO RÁPIDA (29/01/2026) — Vendas (Make/Spalla) + TECwin (Playwright) + NCM + UI + Sales Watch
+
+### O que foi feito hoje (resumo)
+
+- ✅ **TECwin voltou a funcionar (sem Selenium)**:
+  - Nova implementação com **Playwright** em `services/tecwin_service.py` (substitui a dependência de Selenium do `tecwin_scraper.py` no fluxo do chat).
+  - `services/ncm_precheck_service.py` passou a usar `TecwinService`.
+  - Robustez: `ignore_https_errors` (via `TECWIN_IGNORE_HTTPS_ERRORS`) + retry para `net::ERR_ABORTED` (abre nova page e tenta novamente).
+  - Variáveis `.env` relevantes: `TECWIN_ENABLED`, `TECWIN_EMAIL`, `TECWIN_SENHA`, `TECWIN_IGNORE_HTTPS_ERRORS`.
+
+- ✅ **Performance / determinismo de NCM**:
+  - `services/ncm_service.py`: seleção de modelo configurável (env `NCM_CLASSIFICATION_MODEL`, com fallback para `OPENAI_MODEL_ANALITICO` / `OPENAI_MODEL_CONHECIMENTO_GERAL` / `gpt-4o-mini`).
+  - Web search para NCM virou **opcional** (`NCM_WEB_SEARCH_ENABLED=true`).
+  - `services/nesh_hf_service.py`: embedder (`SentenceTransformer`) cacheado em memória para evitar reload a cada chamada.
+
+- ✅ **Relatórios de vendas (Make/Spalla) mais corretos e usáveis**:
+  - `services/handlers/sales_tools_handler.py`:
+    - Extração de data do termo (`DD/MM/YY` ou `DD/MM/YYYY`) para montar `inicio/fim` corretamente (ex.: “rastreador 29/01/26”).
+    - Filtro agora suporta `centro` e melhor compatibilidade do `operacao` com descrição de centro de custo (evita “0 linhas” em casos como “rastreador”).
+    - Formatação melhor: resumo por centro de custo, ordenação por total e alertas de vencimento (vence hoje / vencida).
+  - `services/tool_definitions.py`: descrições ajustadas para orientar melhor a IA:
+    - `consultar_vendas_make` = agregado (sem NF/cliente).
+    - `consultar_vendas_nf_make` = detalhado (NF/cliente).
+    - `filtrar_relatorio_vendas` ganhou parâmetro `centro`.
+  - `services/vendas_make_service.py`: exclusão explícita e accent-insensitive de **“Nacionalização por Conta Própria”** (`COLLATE Latin1_General_CI_AI` + `NOT LIKE '%NACIONALIZ%CONTA%PROPR%'`).
+
+- ✅ **Sales Watch (notificar “NF emitida”) ficou previsível e sem spam no primeiro run**:
+  - `services/sales_watch_service.py`: no primeiro run por termo, “seeda” baseline (salva chaves como vistas) e não notifica, a menos que `SALES_WATCH_NOTIFY_ON_FIRST_RUN=true`.
+  - `services/scheduled_notifications_service.py`: job `sales_watch_hoje` configurado para rodar logo após o start do scheduler (ex.: `next_run_time` + ~10s), com `coalesce=True` e `max_instances=1`.
+  - Variáveis `.env` relevantes: `SALES_WATCH_ENABLED`, `SALES_WATCH_TERMS`, `SALES_WATCH_NOTIFY_ON_FIRST_RUN`, `SALES_WATCH_DEBUG`.
+
+- ✅ **UI/UX: badges de processo (Pantone 143C) corrigidos no streaming + visual mais suave**:
+  - `templates/chat-ia-isolado.html` aplica `decorarProcessosEmHtml(...)` + `aplicarBadgesProcesso(...)` durante updates de streaming (`chunk`, `done`, `error`).
+  - Ajuste de transparência do badge via CSS vars (`--mk-proc-badge-bg`, `--mk-proc-badge-border`).
+
+### Nota rápida (sessões)
+- O “nome” perguntado no início é **personalização**, não é o “usuário do sistema”.
+- Isolamento real é por `session_id` (por navegador/dispositivo). Múltiplas pessoas ao mesmo tempo funciona (sessões independentes).
 
 ## ✅ ATUALIZAÇÃO RÁPIDA (24/01/2026) — Conciliação Bancária (IN 1986), Aportes e Filtro Siscomex
 

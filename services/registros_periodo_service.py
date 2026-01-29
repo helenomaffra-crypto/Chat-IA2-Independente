@@ -180,7 +180,19 @@ class RegistrosPeriodoService:
 
         # 3) Buscar DUIMP do histórico legado (Duimp DB) se período for no passado
         rows3 = []
-        if start_d < hoje - timedelta(days=30):  # Período > 30 dias atrás
+        # ✅ CORREÇÃO (29/01/2026): DUIMP pode não estar em DOCUMENTO_ADUANEIRO (recente),
+        # mas existir no Duimp DB. Para evitar "DUIMP=0" incorreto em períodos recentes,
+        # fazemos fallback também quando não há nenhuma DUIMP em rows1.
+        has_duimp_rows1 = False
+        try:
+            for _r in (rows1 or []):
+                if isinstance(_r, dict) and str(_r.get("tipo_documento") or "").upper() == "DUIMP":
+                    has_duimp_rows1 = True
+                    break
+        except Exception:
+            has_duimp_rows1 = False
+
+        if (not has_duimp_rows1) or (start_d < hoje - timedelta(days=30)):  # Período recente sem DUIMP no banco + histórico
             try:
                 where_cat_duimp = ""
                 if like_categoria:

@@ -27,325 +27,226 @@ class NcmPrecheckService:
         mensagem_lower: str,
         session_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Precheck para consulta de NCM no TECwin.
-        
+        """
+        Precheck para consulta de NCM no TECwin.
+
         Detecta padrões como:
         - "tecwin ncm 07032090"
         - "tecwin 07032090" (sem "ncm")
-        - "tecwin ncm 96170010"
         - "consulta tecwin ncm 07032090"
         """
-        # ✅ Padrão 1: "tecwin ncm" seguido de código NCM
-        padrao_tecwin_ncm = r'\btecwin\s+ncm\s+(\d{4,8})'
+        padrao_tecwin_ncm = r"\btecwin\s+ncm\s+(\d{4,8})"
         match = re.search(padrao_tecwin_ncm, mensagem_lower)
-        
-        # ✅ Padrão 2: "tecwin" seguido diretamente de número NCM (sem "ncm")
+
         if not match:
-            padrao_tecwin_direto = r'\btecwin\s+(\d{4,8})\b'
+            padrao_tecwin_direto = r"\btecwin\s+(\d{4,8})\b"
             match = re.search(padrao_tecwin_direto, mensagem_lower)
-        
-        # ✅ Padrão 3: "tecwin" e "ncm" na mensagem, extrair número de qualquer lugar
-        if not match:
-            if 'tecwin' in mensagem_lower and 'ncm' in mensagem_lower:
-                # Tentar extrair NCM de qualquer lugar na mensagem
-                padrao_ncm = r'(\d{4,8})'
-                matches_ncm = re.findall(padrao_ncm, mensagem)
+
+        if not match and ("tecwin" in mensagem_lower and "ncm" in mensagem_lower):
+            matches_ncm = re.findall(r"(\d{4,8})", mensagem)
+            if matches_ncm:
+                for ncm_candidato in matches_ncm:
+                    if 4 <= len(ncm_candidato) <= 8:
+                        match = type("Match", (), {"group": lambda x: ncm_candidato})()
+                        break
+
+        if not match and "tecwin" in mensagem_lower:
+            match = re.search(r"\btecwin\s+(\d{4,8})\b", mensagem_lower)
+            if not match:
+                matches_ncm = re.findall(r"(\d{4,8})", mensagem)
                 if matches_ncm:
-                    # Pegar o primeiro número que parece NCM (4-8 dígitos)
                     for ncm_candidato in matches_ncm:
                         if 4 <= len(ncm_candidato) <= 8:
-                            match = type('Match', (), {'group': lambda x: ncm_candidato})()
+                            match = type("Match", (), {"group": lambda x: ncm_candidato})()
                             break
-        
-        # ✅ Padrão 4: Apenas "tecwin" seguido de número (mais flexível)
-        if not match:
-            if 'tecwin' in mensagem_lower:
-                # Procurar número logo após "tecwin" ou em qualquer lugar
-                padrao_tecwin_flexivel = r'\btecwin\s+(\d{4,8})\b'
-                match = re.search(padrao_tecwin_flexivel, mensagem_lower)
-                if not match:
-                    # Tentar encontrar qualquer número de 4-8 dígitos na mensagem
-                    padrao_ncm = r'(\d{4,8})'
-                    matches_ncm = re.findall(padrao_ncm, mensagem)
-                    if matches_ncm:
-                        # Pegar o primeiro número que parece NCM
-                        for ncm_candidato in matches_ncm:
-                            if 4 <= len(ncm_candidato) <= 8:
-                                match = type('Match', (), {'group': lambda x: ncm_candidato})()
-                                break
-        
+
         if not match:
             return None
-        
-        codigo_ncm = match.group(1) if hasattr(match, 'group') else match
-        
-        # Normalizar NCM (remover pontos, garantir 8 dígitos se possível)
-        codigo_ncm = codigo_ncm.replace('.', '').strip()
-        
+
+        codigo_ncm = match.group(1) if hasattr(match, "group") else match
+        codigo_ncm = str(codigo_ncm or "").replace(".", "").strip()
+
         logger.info(
             f"[NCM_PRECHECK] Consulta TECwin NCM detectada. NCM: {codigo_ncm} | Mensagem: '{mensagem}'"
         )
-        
+
         try:
-            # Importar e usar o scraper do TECwin
-            import sys
-            import os
-            from pathlib import Path
-            
-            # Caminho do tecwin_scraper.py
-            projeto_root = Path(__file__).parent.parent
-            tecwin_scraper_path = projeto_root / "tecwin_scraper.py"
-            
-            if not tecwin_scraper_path.exists():
-                logger.error(f"[NCM_PRECHECK] tecwin_scraper.py não encontrado em {tecwin_scraper_path}")
+            from services.tecwin_service import TecwinService
+
+            dados = TecwinService(headless=True).consultar_ncm(codigo_ncm)
+            if not isinstance(dados, dict):
+                raise RuntimeError("Resposta inválida do TecwinService (não dict).")
+
+            if not dados.get("sucesso", False):
+                err = dados.get("erro") or "TECWIN_ERRO"
+                msg = dados.get("mensagem") or "Falha ao consultar TECwin."
+                if err == "TECWIN_CREDENTIALS_MISSING":
+                    msg += " Configure `TECWIN_EMAIL` e `TECWIN_SENHA` no ambiente."
+                if err == "TECWIN_DISABLED":
+                    msg += " (TECWIN_ENABLED=false)"
                 return {
                     "sucesso": False,
-                    "resposta": f"❌ **Erro:** Módulo TECwin não encontrado. Verifique se `tecwin_scraper.py` existe no projeto.",
+                    "resposta": f"❌ **Erro ao consultar NCM {codigo_ncm} no TECwin:** {msg}",
                     "_processado_precheck": True,
                 }
-            
-            # Importar TecwinScraper
-            sys.path.insert(0, str(projeto_root))
-            try:
-                from tecwin_scraper import TecwinScraper
-            except ImportError as e:
-                logger.error(f"[NCM_PRECHECK] Erro ao importar TecwinScraper: {e}")
+
+            html = str(dados.get("html") or "")
+            codigo_ncm_sem_ponto = codigo_ncm.replace(".", "")
+
+            def extrair_tr_atributos(html_str: str) -> Dict[str, str]:
+                padrao_tr = rf'<tr[^>]*ncm=["\']?{re.escape(codigo_ncm_sem_ponto)}["\']?[^>]*>'
+                m = re.search(padrao_tr, html_str, re.IGNORECASE)
+                if not m:
+                    return {}
+                tr_tag = m.group(0)
+
+                def _get(nome: str) -> str:
+                    mm = re.search(rf'{nome}=["\']([^"\']*)["\']', tr_tag, re.IGNORECASE)
+                    return mm.group(1) if mm else ""
+
                 return {
-                    "sucesso": False,
-                    "resposta": f"❌ **Erro:** Não foi possível importar o módulo TECwin. Verifique se as dependências estão instaladas (selenium, webdriver-manager).",
-                    "_processado_precheck": True,
+                    "ii": _get("ii"),
+                    "ipi": _get("ipi"),
+                    "pis": _get("pis"),
+                    "cofins": _get("cofins"),
+                    "icms": _get("icms"),
+                    "unidmedida": _get("unidmedida"),
+                    "descricao": _get("descricao") or _get("mercadoria"),
                 }
-            
-            # Buscar credenciais de variáveis de ambiente
-            import os
-            email = os.getenv('TECWIN_EMAIL', 'jalbuquerque@makeconsultores.com.br')
-            senha = os.getenv('TECWIN_SENHA', 'bigmac')
-            
-            # Criar scraper e consultar
-            scraper = TecwinScraper(headless=True)
-            
+
+            attrs = extrair_tr_atributos(html)
+            resposta = f"📋 **NCM {codigo_ncm} - TECwin**\n\n"
+
+            if any(attrs.get(k) for k in ("ii", "ipi", "pis", "cofins", "icms")):
+                resposta += "**Alíquotas:**\n"
+                if attrs.get("ii"):
+                    resposta += f"• **II (Imposto de Importação):** {attrs['ii']}%\n"
+                if attrs.get("ipi"):
+                    resposta += f"• **IPI (Imposto sobre Produtos Industrializados):** {attrs['ipi']}%\n"
+                if attrs.get("pis"):
+                    resposta += f"• **PIS/PASEP:** {attrs['pis']}%\n"
+                if attrs.get("cofins"):
+                    resposta += f"• **COFINS:** {attrs['cofins']}%\n"
+                if attrs.get("icms"):
+                    resposta += f"• **ICMS:** {attrs['icms']}\n"
+                resposta += "\n"
+
+                if attrs.get("unidmedida"):
+                    resposta += f"**Unidade de Medida:** {attrs['unidmedida']}\n\n"
+            else:
+                # Se não encontrou atributos (HTML mudou), ainda devolvemos o link para auditoria.
+                resposta += "_Não consegui extrair as alíquotas automaticamente (o HTML do TECwin pode ter mudado)._ \n\n"
+
+            if dados.get("url"):
+                resposta += f"\n🔗 **Fonte:** [TECwin]({dados['url']})"
+
+            # Salvar contexto (para email/cálculo) — reaproveita NESH/confiança do contexto anterior
             try:
-                # Fazer login
-                if not scraper.login(email, senha):
-                    return {
-                        "sucesso": False,
-                        "resposta": f"❌ **Erro ao fazer login no TECwin.** Verifique as credenciais.",
-                        "_processado_precheck": True,
-                    }
-                
-                # Consultar NCM
-                dados = scraper.consultar_ncm(codigo_ncm)
-                
-                if not dados:
-                    return {
-                        "sucesso": False,
-                        "resposta": f"❌ **NCM {codigo_ncm} não encontrado no TECwin.**",
-                        "_processado_precheck": True,
-                    }
-                
-                # Formatar resposta
-                resposta = f"📋 **NCM {codigo_ncm} - TECwin**\n\n"
-                
-                # Flag para indicar se encontrou alíquotas
-                encontrou_aliquotas = False
-                
-                # Extrair informações do HTML se disponível
-                if 'html' in dados:
-                    try:
-                        html = dados['html']
-                        codigo_ncm_sem_ponto = codigo_ncm.replace('.', '')
-                        
-                        # Procurar pela tag <tr> com o NCM específico usando regex
-                        # Padrão: <tr ... ncm="85171231" ... ii="..." ipi="..." ...>
-                        padrao_tr = rf'<tr[^>]*ncm=["\']?{re.escape(codigo_ncm_sem_ponto)}["\']?[^>]*>'
-                        match_tr = re.search(padrao_tr, html, re.IGNORECASE)
-                        
-                        if match_tr:
-                            tr_tag = match_tr.group(0)
-                            
-                            # Extrair atributos usando regex
-                            def extrair_atributo(nome):
-                                padrao = rf'{nome}=["\']([^"\']*)["\']'
-                                match = re.search(padrao, tr_tag, re.IGNORECASE)
-                                return match.group(1) if match else ''
-                            
-                            # Extrair alíquotas (prioridade: mostrar apenas alíquotas, SEM descrição)
-                            ii = extrair_atributo('ii')
-                            ipi = extrair_atributo('ipi')
-                            pis = extrair_atributo('pis')
-                            cofins = extrair_atributo('cofins')
-                            icms = extrair_atributo('icms')
-                            
-                            if ii or ipi or pis or cofins or icms:
-                                encontrou_aliquotas = True
-                                resposta += "**Alíquotas:**\n"
-                                if ii:
-                                    resposta += f"• **II (Imposto de Importação):** {ii}%\n"
-                                if ipi:
-                                    resposta += f"• **IPI (Imposto sobre Produtos Industrializados):** {ipi}%\n"
-                                if pis:
-                                    resposta += f"• **PIS/PASEP:** {pis}%\n"
-                                if cofins:
-                                    resposta += f"• **COFINS:** {cofins}%\n"
-                                if icms:
-                                    resposta += f"• **ICMS:** {icms}\n"
-                                
-                                resposta += "\n"
-                                
-                                # Extrair unidade de medida (apenas se encontrou alíquotas)
-                                unid_medida = extrair_atributo('unidmedida')
-                                if unid_medida:
-                                    resposta += f"**Unidade de Medida:** {unid_medida}\n\n"
-                    except Exception as e:
-                        logger.debug(f"[NCM_PRECHECK] Erro ao extrair dados do HTML: {e}")
-                
-                # ✅ CORREÇÃO: NÃO usar fallback de tabela se já encontrou alíquotas
-                # O fallback estava incluindo descrições de outros NCMs relacionados
-                # Agora só mostra alíquotas extraídas do HTML
-                
-                # Adicionar URL
-                if 'url' in dados:
-                    resposta += f"\n🔗 **Fonte:** [TECwin]({dados['url']})"
-                
-                # ✅ NOVO: Salvar contexto de NCM/alíquotas para uso em emails
-                try:
-                    session_id_para_salvar = session_id or getattr(self.chat_service, 'session_id_atual', None) if hasattr(self, 'chat_service') else None
-                    if session_id_para_salvar:
-                        # Extrair alíquotas se disponíveis
-                        aliquotas = {}
-                        descricao_ncm = ''
-                        unidade_medida = ''
-                        
-                        if 'html' in dados:
-                            try:
-                                html = dados['html']
-                                codigo_ncm_sem_ponto = codigo_ncm.replace('.', '')
-                                padrao_tr = rf'<tr[^>]*ncm=["\']?{re.escape(codigo_ncm_sem_ponto)}["\']?[^>]*>'
-                                match_tr = re.search(padrao_tr, html, re.IGNORECASE)
-                                
-                                if match_tr:
-                                    tr_tag = match_tr.group(0)
-                                    def extrair_atributo(nome):
-                                        padrao = rf'{nome}=["\']([^"\']*)["\']'
-                                        match = re.search(padrao, tr_tag, re.IGNORECASE)
-                                        return match.group(1) if match else ''
-                                    
-                                    descricao_ncm = extrair_atributo('descricao') or extrair_atributo('mercadoria') or ''
-                                    unidade_medida = extrair_atributo('unidmedida') or ''
-                                    
-                                    ii = extrair_atributo('ii')
-                                    ipi = extrair_atributo('ipi')
-                                    pis = extrair_atributo('pis')
-                                    cofins = extrair_atributo('cofins')
-                                    icms = extrair_atributo('icms')
-                                    
-                                    if ii:
-                                        try:
-                                            aliquotas['ii'] = float(ii.replace('%', '').replace(',', '.'))
-                                        except:
-                                            pass
-                                    if ipi:
-                                        try:
-                                            aliquotas['ipi'] = float(ipi.replace('%', '').replace(',', '.'))
-                                        except:
-                                            pass
-                                    if pis:
-                                        try:
-                                            aliquotas['pis'] = float(pis.replace('%', '').replace(',', '.'))
-                                        except:
-                                            pass
-                                    if cofins:
-                                        try:
-                                            aliquotas['cofins'] = float(cofins.replace('%', '').replace(',', '.'))
-                                        except:
-                                            pass
-                                    if icms:
-                                        aliquotas['icms'] = icms
-                            except Exception as e:
-                                logger.debug(f'Erro ao extrair alíquotas do HTML para contexto: {e}')
-                        
-                        # Buscar contexto anterior de NCM (para pegar NESH, confiança, etc.)
-                        contexto_anterior = None
+                session_id_para_salvar = (
+                    session_id
+                    or getattr(self.chat_service, "session_id_atual", None)
+                    if hasattr(self, "chat_service")
+                    else None
+                )
+                if session_id_para_salvar:
+                    aliquotas: Dict[str, Any] = {}
+                    if attrs.get("ii"):
                         try:
-                            contextos = buscar_contexto_sessao(session_id_para_salvar, tipo_contexto='ultima_classificacao_ncm')
-                            if contextos and len(contextos) > 0:
-                                contexto_anterior = contextos[0].get('dados', {})
-                        except:
+                            aliquotas["ii"] = float(attrs["ii"].replace("%", "").replace(",", "."))
+                        except Exception:
                             pass
-                        
-                        # ✅ CRÍTICO: Converter nota_nesh de dict para string se necessário
-                        nota_nesh_anterior = contexto_anterior.get('nota_nesh', '') if contexto_anterior else ''
-                        nota_nesh_string = ''
-                        if nota_nesh_anterior:
-                            if isinstance(nota_nesh_anterior, dict):
-                                # Se for dict, extrair texto completo
-                                titulo = nota_nesh_anterior.get('position_title', '')
-                                texto = nota_nesh_anterior.get('text', '')
-                                if titulo:
-                                    nota_nesh_string = f"{titulo}\n\n{texto}" if texto else titulo
-                                else:
-                                    nota_nesh_string = texto if texto else ''
-                            else:
-                                nota_nesh_string = str(nota_nesh_anterior)
-                        
-                        # Montar contexto completo
-                        contexto_ncm = {
-                            'ncm': codigo_ncm,
-                            'descricao': descricao_ncm or (contexto_anterior.get('descricao') if contexto_anterior else ''),
-                            'confianca': contexto_anterior.get('confianca', 0.0) if contexto_anterior else 0.0,
-                            'nota_nesh': nota_nesh_string,  # ✅ String, não dict
-                            'aliquotas': aliquotas,
-                            'unidade_medida': unidade_medida or (contexto_anterior.get('unidade_medida', '') if contexto_anterior else ''),
-                            'fonte': 'TECwin',
-                            'explicacao': contexto_anterior.get('explicacao', '') if contexto_anterior else ''
-                        }
-                        
+                    if attrs.get("ipi"):
+                        try:
+                            aliquotas["ipi"] = float(attrs["ipi"].replace("%", "").replace(",", "."))
+                        except Exception:
+                            pass
+                    if attrs.get("pis"):
+                        try:
+                            aliquotas["pis"] = float(attrs["pis"].replace("%", "").replace(",", "."))
+                        except Exception:
+                            pass
+                    if attrs.get("cofins"):
+                        try:
+                            aliquotas["cofins"] = float(attrs["cofins"].replace("%", "").replace(",", "."))
+                        except Exception:
+                            pass
+                    if attrs.get("icms"):
+                        aliquotas["icms"] = attrs["icms"]
+
+                    contexto_anterior = None
+                    try:
+                        contextos = buscar_contexto_sessao(
+                            session_id_para_salvar, tipo_contexto="ultima_classificacao_ncm"
+                        )
+                        if contextos:
+                            contexto_anterior = contextos[0].get("dados", {})
+                    except Exception:
+                        contexto_anterior = None
+
+                    nota_nesh_anterior = (
+                        (contexto_anterior or {}).get("nota_nesh", "") if isinstance(contexto_anterior, dict) else ""
+                    )
+                    nota_nesh_string = ""
+                    if nota_nesh_anterior:
+                        if isinstance(nota_nesh_anterior, dict):
+                            titulo = nota_nesh_anterior.get("position_title", "")
+                            texto = nota_nesh_anterior.get("text", "")
+                            nota_nesh_string = f"{titulo}\n\n{texto}" if titulo and texto else (titulo or texto or "")
+                        else:
+                            nota_nesh_string = str(nota_nesh_anterior)
+
+                    contexto_ncm = {
+                        "ncm": codigo_ncm,
+                        "descricao": (attrs.get("descricao") or (contexto_anterior or {}).get("descricao") or ""),
+                        "confianca": float((contexto_anterior or {}).get("confianca", 0.0) or 0.0)
+                        if isinstance(contexto_anterior, dict)
+                        else 0.0,
+                        "nota_nesh": nota_nesh_string,
+                        "aliquotas": aliquotas,
+                        "unidade_medida": attrs.get("unidmedida")
+                        or ((contexto_anterior or {}).get("unidade_medida", "") if isinstance(contexto_anterior, dict) else ""),
+                        "fonte": "TECwin",
+                        "explicacao": (contexto_anterior or {}).get("explicacao", "")
+                        if isinstance(contexto_anterior, dict)
+                        else "",
+                    }
+
+                    salvar_contexto_sessao(
+                        session_id=session_id_para_salvar,
+                        tipo_contexto="ultima_classificacao_ncm",
+                        chave="ncm",
+                        valor=codigo_ncm,
+                        dados_adicionais=contexto_ncm,
+                    )
+
+                    if aliquotas:
                         salvar_contexto_sessao(
                             session_id=session_id_para_salvar,
-                            tipo_contexto='ultima_classificacao_ncm',
-                            chave='ncm',
+                            tipo_contexto="ncm_aliquotas",
+                            chave="ncm",
                             valor=codigo_ncm,
-                            dados_adicionais=contexto_ncm
+                            dados_adicionais={
+                                "ncm": codigo_ncm,
+                                "aliquotas": aliquotas,
+                                "descricao": attrs.get("descricao") or "",
+                            },
                         )
-                        
-                        # ✅ NOVO: Salvar também com tipo específico para cálculo de impostos
-                        if aliquotas:
-                            salvar_contexto_sessao(
-                                session_id=session_id_para_salvar,
-                                tipo_contexto='ncm_aliquotas',
-                                chave='ncm',
-                                valor=codigo_ncm,
-                                dados_adicionais={
-                                    'ncm': codigo_ncm,
-                                    'aliquotas': aliquotas,
-                                    'descricao': descricao_ncm
-                                }
-                            )
-                        
-                        logger.info(f"✅ Contexto de NCM/alíquotas salvo: {codigo_ncm}")
-                except Exception as e:
-                    logger.debug(f'Erro ao salvar contexto NCM após TECwin: {e}')
-                
-                return {
-                    "sucesso": True,
-                    "resposta": resposta,
-                    "tool_calls": [
-                        {
-                            "name": "consultar_tecwin_ncm",
-                            "arguments": {"ncm": codigo_ncm},
-                        }
-                    ],
-                    "_processado_precheck": True,
-                }
-                
-            finally:
-                scraper.fechar()
-                
+
+                    logger.info(f"✅ Contexto de NCM/alíquotas salvo: {codigo_ncm}")
+            except Exception as e:
+                logger.debug(f"Erro ao salvar contexto NCM após TECwin: {e}")
+
+            return {
+                "sucesso": True,
+                "resposta": resposta,
+                "tool_calls": [
+                    {"name": "consultar_tecwin_ncm", "arguments": {"ncm": codigo_ncm}},
+                ],
+                "_processado_precheck": True,
+            }
+
         except Exception as e:
-            logger.error(
-                f"[NCM_PRECHECK] Erro ao consultar TECwin NCM {codigo_ncm}: {e}",
-                exc_info=True,
-            )
+            logger.error(f"[NCM_PRECHECK] Erro ao consultar TECwin NCM {codigo_ncm}: {e}", exc_info=True)
             return {
                 "sucesso": False,
                 "resposta": f"❌ **Erro ao consultar NCM {codigo_ncm} no TECwin:** {str(e)}",

@@ -12,7 +12,7 @@ import logging
 import os
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Dict
 
@@ -48,6 +48,38 @@ class SalesToolsHandler:
         m = re.match(r"^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2}|\d{4})$", s)
         if not m:
             return value
+
+    @staticmethod
+    def _extrair_data_do_termo(termo: Any) -> Dict[str, Any]:
+        """
+        Extrai uma data explícita dentro do termo (ex.: "rastreador 29/01/26") para evitar
+        que a data vire token de busca e para permitir recorte correto por dia.
+
+        Retorna:
+          - data_iso: "YYYY-MM-DD" | None
+          - termo_limpo: str | None
+          - encontrado_raw: str | None
+        """
+        if not isinstance(termo, str):
+            return {"data_iso": None, "termo_limpo": termo, "encontrado_raw": None}
+        t = termo.strip()
+        if not t:
+            return {"data_iso": None, "termo_limpo": None, "encontrado_raw": None}
+
+        m = re.search(r"\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b", t)
+        if not m:
+            return {"data_iso": None, "termo_limpo": t, "encontrado_raw": None}
+
+        raw = m.group(1)
+        dt_iso = SalesToolsHandler._normalizar_data_br_para_iso(raw)
+        if not isinstance(dt_iso, str) or not re.match(r"^\d{4}-\d{2}-\d{2}$", dt_iso):
+            return {"data_iso": None, "termo_limpo": t, "encontrado_raw": raw}
+
+        termo_limpo = (t.replace(raw, " ").strip() or None)
+        if isinstance(termo_limpo, str):
+            termo_limpo = re.sub(r"\s{2,}", " ", termo_limpo).strip() or None
+
+        return {"data_iso": dt_iso, "termo_limpo": termo_limpo, "encontrado_raw": raw}
         dd = int(m.group(1))
         mm = int(m.group(2))
         yy_raw = m.group(3)
@@ -143,6 +175,25 @@ class SalesToolsHandler:
             # ✅ Aceitar datas no padrão BR (DD/MM/AA ou DD/MM/AAAA) no chat/WhatsApp
             inicio = SalesToolsHandler._normalizar_data_br_para_iso(inicio)
             fim = SalesToolsHandler._normalizar_data_br_para_iso(fim)
+
+            # ✅ UX: data dentro do termo (ex.: "rastreador 29/01/26")
+            # -> vira período de 1 dia e remove do termo para não poluir a busca.
+            try:
+                extracted = SalesToolsHandler._extrair_data_do_termo(termo)
+                if (
+                    extracted.get("data_iso")
+                    and (not inicio)
+                    and (not fim)
+                    and (not periodo_mes)
+                    and (not apenas_hoje)
+                ):
+                    dt_ini = extracted["data_iso"]
+                    dt_fim = (datetime.fromisoformat(dt_ini) + timedelta(days=1)).date().isoformat()
+                    inicio = dt_ini
+                    fim = dt_fim
+                    termo = extracted.get("termo_limpo")
+            except Exception:
+                pass
 
             resultado = svc.consultar_vendas(
                 inicio=inicio,
@@ -314,6 +365,16 @@ class SalesToolsHandler:
                     s = s.split(" - ", 1)[0].strip()
                 return s or "Outros"
 
+            def _is_excluded_op(op_name: str) -> bool:
+                """
+                Regras de negócio: operações que NÃO são "venda" (não devem aparecer no relatório).
+                """
+                op_u = (op_name or "").strip().upper()
+                # Nacionalização por Conta Própria = entrada/importação (não é venda)
+                if ("CONTA" in op_u) and ("PROPR" in op_u) and ("NACIONALIZ" in op_u):
+                    return True
+                return False
+
             def _cc_label(r: Dict[str, Any]) -> str:
                 cc = (r.get("descricao_centro_custo_documento") or "").strip()
                 cod = r.get("codigo_centro_custo_documento")
@@ -366,6 +427,8 @@ class SalesToolsHandler:
                     ops = {}
                     for rr in cc_rows:
                         op = _op_base(rr.get("descricao_tipo_operacao_documento"))
+                        if _is_excluded_op(op):
+                            continue
                         ops.setdefault(op, []).append(rr)
 
                     for op_name, op_rows in sorted(ops.items(), key=lambda kv: sum(float(x.get("total_valor") or 0) for x in kv[1] if isinstance(x, dict)), reverse=True):
@@ -534,6 +597,25 @@ class SalesToolsHandler:
             argumentos["inicio"] = SalesToolsHandler._normalizar_data_br_para_iso(argumentos.get("inicio"))
             argumentos["fim"] = SalesToolsHandler._normalizar_data_br_para_iso(argumentos.get("fim"))
 
+            # ✅ UX: data dentro do termo (ex.: "rastreador 29/01/26")
+            # -> define inicio/fim do dia e remove do termo para evitar fuzzy_term/ruído.
+            try:
+                extracted = SalesToolsHandler._extrair_data_do_termo(argumentos.get("termo"))
+                if (
+                    extracted.get("data_iso")
+                    and (not argumentos.get("inicio"))
+                    and (not argumentos.get("fim"))
+                    and (not argumentos.get("periodo_mes"))
+                    and (not bool(argumentos.get("apenas_hoje", False)))
+                ):
+                    dt_ini = extracted["data_iso"]
+                    dt_fim = (datetime.fromisoformat(dt_ini) + timedelta(days=1)).date().isoformat()
+                    argumentos["inicio"] = dt_ini
+                    argumentos["fim"] = dt_fim
+                    argumentos["termo"] = extracted.get("termo_limpo")
+            except Exception:
+                pass
+
             resultado = svc.consultar_vendas_por_nf(
                 inicio=argumentos.get("inicio"),
                 fim=argumentos.get("fim"),
@@ -589,6 +671,13 @@ class SalesToolsHandler:
             total_sum_doc = 0.0
             total_sum_recebido = 0.0
             total_sum_em_aberto = 0.0
+            # ✅ Alertas de cobrança no modo "normal":
+            # - vencidas (venc < hoje) e ainda em aberto
+            # - vencem hoje (venc == hoje) e ainda em aberto
+            count_vencidas = 0
+            sum_vencidas_aberto = 0.0
+            count_vence_hoje = 0
+            sum_vence_hoje_aberto = 0.0
             centros = {}
             cliente_vazio = True
 
@@ -598,6 +687,9 @@ class SalesToolsHandler:
                 Ex.: compras não são "venda" e poluem o relatório.
                 """
                 op_u = (op_name or "").strip().upper()
+                # ✅ Regra de negócio: "Nacionalização por Conta Própria" NÃO é venda (é entrada/importação).
+                if ("CONTA" in op_u) and ("PROPR" in op_u) and ("NACIONALIZ" in op_u):
+                    return True
                 return op_u in {
                     "COMPRA DE MERCADORIA PARA REVENDA",
                     "COMISSÃO DE VENDA",
@@ -854,6 +946,22 @@ class SalesToolsHandler:
                                 aberto = float(r.get("valor_em_aberto") or 0.0)
                                 total_sum_recebido += rec
                                 total_sum_em_aberto += aberto
+                                # ✅ Cobrança: detectar vencidas / vencem hoje (apenas quando há em aberto > 0)
+                                try:
+                                    if aberto > 0:
+                                        venc_raw = r.get("proximo_vencimento")
+                                        venc_s = str(venc_raw or "").strip()
+                                        venc_s10 = venc_s[:10] if len(venc_s) >= 10 else venc_s
+                                        if re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10):
+                                            hoje_s = hoje.isoformat()
+                                            if venc_s10 < hoje_s:
+                                                count_vencidas += 1
+                                                sum_vencidas_aberto += float(aberto)
+                                            elif venc_s10 == hoje_s:
+                                                count_vence_hoje += 1
+                                                sum_vence_hoje_aberto += float(aberto)
+                                except Exception:
+                                    pass
                             except Exception:
                                 pass
                 except Exception:
@@ -897,6 +1005,18 @@ class SalesToolsHandler:
                     f"{cc} (R$ {val:,.2f})".replace(",", "X").replace(".", ",").replace("X", ".")
                     for cc, val in top_cc
                 ) + "\n"
+            # ✅ Aviso de cobrança (apenas modo normal): venceram / vencem hoje e ainda em aberto
+            if (count_vence_hoje or count_vencidas) and (total_sum_em_aberto > 0):
+                def _fmt_brl_inline(n: float) -> str:
+                    s = f"{float(n or 0.0):,.2f}"
+                    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+                    return f"R$ {s}"
+                parts = []
+                if count_vence_hoje:
+                    parts.append(f"vence hoje: **{_fmt_brl_inline(sum_vence_hoje_aberto)}** ({count_vence_hoje} NF)")
+                if count_vencidas:
+                    parts.append(f"vencidas: **{_fmt_brl_inline(sum_vencidas_aberto)}** ({count_vencidas} NF)")
+                titulo += "⚠️ **Cobrança (em aberto):** " + " | ".join(parts) + "\n"
             titulo += "\n"
 
             # ✅ Formato "executivo": agrupar por empresa + tipo de operação e remover repetição
@@ -954,13 +1074,61 @@ class SalesToolsHandler:
                 out += "Cliente: ⚠️ ainda não localizado no legado por este caminho (provável em tabelas de NF-e/itens, dependendo do schema).\n\n"
 
             empresa_key = "empresa_vendedora"
-            # Se não vier empresa, agrupa tudo como "N/A"
-            empresas = sorted(
-                {
-                    (r.get(empresa_key) or "N/A").strip() if isinstance(r, dict) else "N/A"
-                    for r in rows
-                }
-            )
+            # ✅ Melhor UX: ordenar blocos por total (evita começar por "Empresa: 12" e confundir que o relatório é só daquele centro)
+            # Se não vier empresa, agrupa tudo como "N/A".
+            emp_aggs: Dict[str, Dict[str, float]] = {}
+            for rr in rows:
+                if not isinstance(rr, dict):
+                    continue
+                emp_k = (rr.get(empresa_key) or "N/A")
+                emp_k = str(emp_k).strip() or "N/A"
+                emp_aggs.setdefault(emp_k, {"vendas": 0.0, "devol": 0.0, "doc": 0.0})
+                try:
+                    op_t = _op_base_totais(rr.get("descricao_tipo_operacao_documento"))
+                    is_doc_t = op_t.strip().upper() == "ICMS"
+                    is_excluded_t = _is_excluded_op(op_t)
+                    is_devol_t = _is_devolucao_op(op_t)
+                    v_t = float(rr.get("total_nf")) if rr.get("total_nf") is not None else 0.0
+                    if is_doc_t:
+                        emp_aggs[emp_k]["doc"] += v_t
+                    elif not is_excluded_t:
+                        if is_devol_t:
+                            emp_aggs[emp_k]["devol"] += abs(v_t)
+                        else:
+                            emp_aggs[emp_k]["vendas"] += v_t
+                except Exception:
+                    pass
+
+            def _emp_sort_key(item):
+                name, agg = item
+                liq = float(agg.get("vendas", 0.0)) - float(agg.get("devol", 0.0))
+                # Empates: manter ordem estável por nome
+                return (liq, name.lower())
+
+            empresas = [k for k, _agg in sorted(emp_aggs.items(), key=_emp_sort_key, reverse=True)]
+
+            # ✅ Quando for "geral" (sem termo), mostrar um resumo por centro logo no topo.
+            try:
+                termo_r_local = (termo_r or "").strip()
+                if not termo_r_local and centros:
+                    out += "📌 **Resumo por centro de custo (vendas brutas A)**\n"
+                    # Top 10 centros por total
+                    top_cc2 = sorted(centros.items(), key=lambda x: x[1], reverse=True)[:10]
+                    for cc_name, cc_total in top_cc2:
+                        # contar docs do centro (inclui docs de venda; não tenta excluir devol/doc aqui para ser simples)
+                        count_docs = 0
+                        try:
+                            for rr in rows:
+                                if not isinstance(rr, dict):
+                                    continue
+                                if (rr.get("descricao_centro_custo_documento") or "").strip() == cc_name:
+                                    count_docs += 1
+                        except Exception:
+                            count_docs = 0
+                        out += f"- **{cc_name}**: **{_fmt_brl(cc_total)}** — {count_docs} doc(s)\n"
+                    out += "\n"
+            except Exception:
+                pass
 
             shown = 0
             first_empresa = True
@@ -969,25 +1137,10 @@ class SalesToolsHandler:
                 if not emp_rows:
                     continue
 
-                emp_total_vendas_brutas = 0.0
-                emp_total_devolucoes = 0.0
-                emp_total_doc = 0.0
-                for rr in emp_rows:
-                    try:
-                        op = _op_base_totais(rr.get("descricao_tipo_operacao_documento"))
-                        is_doc = op.strip().upper() == "ICMS"
-                        is_excluded = _is_excluded_op(op)
-                        is_devolucao = _is_devolucao_op(op)
-                        if is_doc:
-                            emp_total_doc += float(rr.get("total_nf")) if rr.get("total_nf") is not None else 0.0
-                        elif not is_excluded:
-                            vv = float(rr.get("total_nf")) if rr.get("total_nf") is not None else 0.0
-                            if is_devolucao:
-                                emp_total_devolucoes += abs(vv)
-                            else:
-                                emp_total_vendas_brutas += vv
-                    except Exception:
-                        pass
+                agg_emp = emp_aggs.get(emp) or {}
+                emp_total_vendas_brutas = float(agg_emp.get("vendas", 0.0) or 0.0)
+                emp_total_devolucoes = float(agg_emp.get("devol", 0.0) or 0.0)
+                emp_total_doc = float(agg_emp.get("doc", 0.0) or 0.0)
                 emp_total_liquido = emp_total_vendas_brutas - emp_total_devolucoes
                 emp_total_fmt = f"{emp_total_liquido:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
                 emp_doc_fmt = f"{emp_total_doc:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -1038,7 +1191,7 @@ class SalesToolsHandler:
                         cli_txt = cli if cli else "—"
                         cli_disp = _span("mk-color-cliente", cli_txt) if cli_txt != "—" else _span("mk-color-muted", cli_txt)
                         val = _fmt_brl(rr.get("total_nf"))
-                        # ⚠️ Aviso na linha da NF (mais visível): em aberto > 0 e vencimento < hoje
+                        # ⚠️ Aviso na linha da NF (mais visível): em aberto > 0 e vencimento <= hoje
                         # (não depende de <span>; usa só texto/markdown)
                         alert_nf = ""
                         try:
@@ -1046,7 +1199,9 @@ class SalesToolsHandler:
                             venc_raw = rr.get("proximo_vencimento")
                             venc_s = str(venc_raw or "").strip()
                             venc_s10 = venc_s[:10] if len(venc_s) >= 10 else ""
-                            overdue = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 < hoje.isoformat()))
+                            hoje_s = hoje.isoformat()
+                            overdue = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 < hoje_s))
+                            due_today = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 == hoje_s))
                             if ab_num > 0 and overdue:
                                 dias = None
                                 try:
@@ -1055,6 +1210,8 @@ class SalesToolsHandler:
                                 except Exception:
                                     dias = None
                                 alert_nf = f" ⚠️{dias}d" if isinstance(dias, int) else " ⚠️"
+                            elif ab_num > 0 and due_today:
+                                alert_nf = " ⏰hoje"
                         except Exception:
                             alert_nf = ""
                         # Alguns movimentos (ex.: ICMS) podem usar um "número de documento/ref" que não é NF-e padrão.
@@ -1072,33 +1229,43 @@ class SalesToolsHandler:
                                 if rec is not None or aberto is not None:
                                     rec_txt = _fmt_brl(rec or 0.0)
                                     ab_txt = _fmt_brl(aberto or 0.0)
-                                    # Vencimento: se vencido e em aberto, deixar a data em **bold** e incluir ⚠️.
+                                    # Vencimento:
+                                    # - se vencido e em aberto: **bold** + ⚠️
+                                    # - se vence hoje e em aberto: **bold** + ⏰
                                     venc_txt = ""
                                     try:
                                         ab_num = _parse_float_any(aberto)
                                         venc_s = str(venc or "").strip()
                                         venc_s10 = venc_s[:10] if len(venc_s) >= 10 else ""
-                                        overdue = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 < hoje.isoformat()))
+                                        hoje_s = hoje.isoformat()
+                                        overdue = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 < hoje_s))
+                                        due_today = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 == hoje_s))
                                         if venc_s:
                                             if ab_num > 0 and overdue:
                                                 venc_txt = f" | Venc: **{_escape_html(venc_s10 or venc_s)}** ⚠️"
+                                            elif ab_num > 0 and due_today:
+                                                venc_txt = f" | Venc: **{_escape_html(venc_s10 or venc_s)}** ⏰"
                                             else:
                                                 venc_txt = f" | Venc: {_escape_html(venc_s10 or venc_s)}"
                                     except Exception:
                                         venc_txt = f" | Venc: {_escape_html(str(venc))}" if venc else ""
                                     rec_col = _span("mk-color-recebido", rec_txt)
                                     ab_col = _span("mk-color-aberto", ab_txt)
-                                    # ⚠️ Aviso automático: NF em aberto e vencida
+                                    # ⚠️ Aviso automático: NF em aberto e vencida / vence hoje
                                     alert_txt = ""
                                     try:
                                         ab_num = _parse_float_any(aberto)
                                         venc_s = str(venc or "").strip()
                                         venc_s10 = venc_s[:10] if len(venc_s) >= 10 else ""
-                                        overdue = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 < hoje.isoformat()))
+                                        hoje_s = hoje.isoformat()
+                                        overdue = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 < hoje_s))
+                                        due_today = bool(venc_s10 and re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10) and (venc_s10 == hoje_s))
                                         if ab_num > 0 and overdue and venc_s10:
                                             dias = (hoje - datetime.strptime(venc_s10, "%Y-%m-%d").date()).days
                                             # ✅ Não depender de HTML/CSS para o alerta aparecer
                                             alert_txt = f" | ⚠️ Vencida ({dias}d)"
+                                        elif ab_num > 0 and due_today:
+                                            alert_txt = " | ⏰ Vence hoje"
                                     except Exception:
                                         alert_txt = ""
 
@@ -1286,6 +1453,7 @@ class SalesToolsHandler:
             cliente = (argumentos.get("cliente") or "").strip() or None
             empresa = (argumentos.get("empresa") or "").strip() or None
             operacao = (argumentos.get("operacao") or "").strip() or None
+            centro = (argumentos.get("centro") or "").strip() or None
             apenas_devolucao = bool(argumentos.get("apenas_devolucao", False))
             apenas_icms = bool(argumentos.get("apenas_icms", False))
             data = (argumentos.get("data") or "").strip() or None
@@ -1364,8 +1532,17 @@ class SalesToolsHandler:
                     emp = (r.get("empresa_vendedora") or "").strip()
                     if empresa.lower() not in emp.lower():
                         continue
+                if centro:
+                    cc = (r.get("descricao_centro_custo_documento") or "").strip()
+                    if centro.lower() not in cc.lower():
+                        continue
                 if operacao:
-                    if operacao.lower() not in (op_base or "").lower() and operacao.lower() not in (str(op_full or "")).lower():
+                    cc = (r.get("descricao_centro_custo_documento") or "").strip()
+                    if (
+                        operacao.lower() not in (op_base or "").lower()
+                        and operacao.lower() not in (str(op_full or "")).lower()
+                        and operacao.lower() not in cc.lower()
+                    ):
                         continue
 
                 d = (r.get("data_emissao") or "").strip()
@@ -1415,6 +1592,7 @@ class SalesToolsHandler:
                     "cliente": cliente,
                     "empresa": empresa,
                     "operacao": operacao,
+                    "centro": centro,
                     "apenas_devolucao": apenas_devolucao,
                     "apenas_icms": apenas_icms,
                     "data": data_n,
@@ -1457,9 +1635,17 @@ class SalesToolsHandler:
             total_sum_doc = 0.0
             centros = {}
             cliente_vazio = True
+            # ✅ Alertas de cobrança no relatório filtrado (modo normal):
+            count_vencidas = 0
+            sum_vencidas_aberto = 0.0
+            count_vence_hoje = 0
+            sum_vence_hoje_aberto = 0.0
 
             def _is_excluded_op(op_name: str) -> bool:
                 op_u = (op_name or "").strip().upper()
+                # ✅ Regra de negócio: "Nacionalização por Conta Própria" NÃO é venda (é entrada/importação).
+                if ("CONTA" in op_u) and ("PROPR" in op_u) and ("NACIONALIZ" in op_u):
+                    return True
                 return op_u in {
                     "COMPRA DE MERCADORIA PARA REVENDA",
                     "COMISSÃO DE VENDA",
@@ -1483,6 +1669,22 @@ class SalesToolsHandler:
                             total_sum_devolucoes += abs(vv)
                         else:
                             total_sum_vendas_brutas += vv
+                            # ✅ Cobrança: venceram/vence hoje e ainda em aberto
+                            try:
+                                hoje_s = datetime.now().date().isoformat()
+                                aberto = float(r.get("valor_em_aberto") or 0.0)
+                                if aberto > 0:
+                                    venc_s = str(r.get("proximo_vencimento") or "").strip()
+                                    venc_s10 = venc_s[:10] if len(venc_s) >= 10 else venc_s
+                                    if re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s10):
+                                        if venc_s10 < hoje_s:
+                                            count_vencidas += 1
+                                            sum_vencidas_aberto += float(aberto)
+                                        elif venc_s10 == hoje_s:
+                                            count_vence_hoje += 1
+                                            sum_vence_hoje_aberto += float(aberto)
+                            except Exception:
+                                pass
                 except Exception:
                     pass
                 cc = (r.get("descricao_centro_custo_documento") or "").strip()
@@ -1516,6 +1718,17 @@ class SalesToolsHandler:
                     f"{cc} (R$ {val:,.2f})".replace(",", "X").replace(".", ",").replace("X", ".")
                     for cc, val in top_cc
                 ) + "\n"
+            if count_vence_hoje or count_vencidas:
+                def _fmt_brl_inline(n: float) -> str:
+                    s = f"{float(n or 0.0):,.2f}"
+                    s = s.replace(",", "X").replace(".", ",").replace("X", ".")
+                    return f"R$ {s}"
+                parts = []
+                if count_vence_hoje:
+                    parts.append(f"vence hoje: **{_fmt_brl_inline(sum_vence_hoje_aberto)}** ({count_vence_hoje} NF)")
+                if count_vencidas:
+                    parts.append(f"vencidas: **{_fmt_brl_inline(sum_vencidas_aberto)}** ({count_vencidas} NF)")
+                titulo += "⚠️ **Cobrança (em aberto):** " + " | ".join(parts) + "\n"
             titulo += "\n"
 
             # Render "executivo" por empresa/operação (mesma lógica)
@@ -1664,7 +1877,7 @@ class SalesToolsHandler:
                         cli = (rr.get("cliente") or "").strip() or "—"
                         cli_disp = _span("mk-color-cliente", cli) if cli != "—" else _span("mk-color-muted", cli)
                         val = _fmt_brl(rr.get("total_nf"))
-                        # ⚠️ Aviso na linha da NF (mais visível): em aberto > 0 e vencimento < hoje
+                        # ⚠️ Aviso na linha da NF (mais visível): em aberto > 0 e vencimento <= hoje
                         alert_nf = ""
                         try:
                             venc_dt = _parse_date_any(rr.get("proximo_vencimento"))
@@ -1674,10 +1887,15 @@ class SalesToolsHandler:
                             overdue = (venc_dt is not None and venc_dt < hoje) or (
                                 bool(re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s)) and venc_s < hoje.isoformat()
                             )
+                            due_today = (venc_dt is not None and venc_dt == hoje) or (
+                                bool(re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s)) and venc_s == hoje.isoformat()
+                            )
                             if ab_num > 0 and overdue:
                                 dias = (hoje - venc_dt).days
                                 # ✅ Não depender de HTML/CSS para o alerta aparecer
                                 alert_nf = f" ⚠️{dias}d"
+                            elif ab_num > 0 and due_today:
+                                alert_nf = " ⏰hoje"
                         except Exception:
                             alert_nf = ""
                         rotulo_doc = "DOC" if op_name.strip().upper() == "ICMS" else "NF"
@@ -1691,7 +1909,9 @@ class SalesToolsHandler:
                                 if rec is not None or aberto is not None:
                                     rec_txt = _fmt_brl(rec or 0.0)
                                     ab_txt = _fmt_brl(aberto or 0.0)
-                                    # Destacar vencimento vencido (vermelho/bold) quando em aberto > 0
+                                    # Destacar vencimento:
+                                    # - vencido: vermelho/bold + ⚠️
+                                    # - vence hoje: laranja/bold + ⏰
                                     venc_txt = ""
                                     try:
                                         ab_num = _parse_float_any(aberto)
@@ -1700,16 +1920,21 @@ class SalesToolsHandler:
                                         overdue = (venc_dt is not None and venc_dt < hoje) or (
                                             bool(re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s)) and venc_s < hoje.isoformat()
                                         )
+                                        due_today = (venc_dt is not None and venc_dt == hoje) or (
+                                            bool(re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s)) and venc_s == hoje.isoformat()
+                                        )
                                         if venc:
                                             venc_disp = _escape_html(venc_s)
                                             if ab_num > 0 and overdue:
                                                 venc_disp = f'<span style="color:#c62828;font-weight:800;">{venc_disp}</span>'
+                                            elif ab_num > 0 and due_today:
+                                                venc_disp = f'<span style="color:#ef6c00;font-weight:800;">{venc_disp}</span> ⏰'
                                             venc_txt = f" | Venc: {venc_disp}"
                                     except Exception:
                                         venc_txt = f" | Venc: {_escape_html(str(venc))}" if venc else ""
                                     rec_col = _span("mk-color-recebido", rec_txt)
                                     ab_col = _span("mk-color-aberto", ab_txt)
-                                    # ⚠️ Aviso automático: NF em aberto e vencida
+                                    # ⚠️ Aviso automático: NF em aberto e vencida / vence hoje
                                     alert_txt = ""
                                     try:
                                         ab_num = _parse_float_any(aberto)
@@ -1718,10 +1943,15 @@ class SalesToolsHandler:
                                         overdue = (venc_dt is not None and venc_dt < hoje) or (
                                             bool(re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s)) and venc_s < hoje.isoformat()
                                         )
+                                        due_today = (venc_dt is not None and venc_dt == hoje) or (
+                                            bool(re.match(r"^\d{4}-\d{2}-\d{2}$", venc_s)) and venc_s == hoje.isoformat()
+                                        )
                                         if ab_num > 0 and overdue:
                                             dias = (hoje - venc_dt).days
                                             # ✅ Não depender de HTML/CSS para o alerta aparecer
                                             alert_txt = f" | ⚠️ Vencida ({dias}d)"
+                                        elif ab_num > 0 and due_today:
+                                            alert_txt = " | ⏰ Vence hoje"
                                     except Exception:
                                         alert_txt = ""
 

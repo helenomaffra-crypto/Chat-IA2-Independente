@@ -144,6 +144,8 @@ class SalesWatchService:
 
         for termo in termos:
             seen = self._load_seen(termo)
+            first_run_for_termo = len(seen) == 0
+            notify_on_first = os.getenv("SALES_WATCH_NOTIFY_ON_FIRST_RUN", "false").strip().lower() == "true"
             resp = self._svc.consultar_vendas_por_nf(inicio=ini, fim=fim, termo=termo, top=250)
             if not resp.get("sucesso"):
                 continue
@@ -154,20 +156,33 @@ class SalesWatchService:
                 if not isinstance(r, dict):
                     continue
                 k = _row_key(r)
-                if k and k not in seen:
+                if not k:
+                    continue
+
+                # ✅ Comportamento padrão: na PRIMEIRA execução do termo, "seedar" baseline (sem notificar)
+                # para evitar spam ao subir o container e, ao mesmo tempo, deixar o watch pronto imediatamente.
+                if first_run_for_termo and (not notify_on_first):
+                    seen.add(k)
+                    continue
+
+                if k not in seen:
                     novas.append(r)
                     try:
                         total_novas += float(r.get("total_nf") or 0.0)
                     except Exception:
                         pass
-                if k:
                     seen.add(k)
+                else:
+                    # já visto
+                    pass
 
             # persistir sempre (para não duplicar no próximo tick)
             self._save_seen(termo, seen)
 
             if novas:
                 results.append(WatchResult(termo=termo, novas=novas, total_novas=total_novas))
+            elif first_run_for_termo and rows and (not notify_on_first):
+                logger.info(f"💾 [SALES_WATCH] Baseline inicial salvo (termo={termo!r}, rows={len(rows)})")
 
         return results
 

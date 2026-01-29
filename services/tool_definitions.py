@@ -1596,7 +1596,7 @@ def get_available_tools(compact: bool = True, whitelist: Optional[List[str]] = N
         "type": "function",
         "function": {
             "name": "consultar_vendas_make",
-            "description": "Consulta vendas no SQL Server legado (Make/Spalla) por período, com filtro opcional por termo (produto/serviço) e quebra por centro de custo/tipo de operação. Use para perguntas do tipo: 'quanto vendi de alho em janeiro?', 'quanto vendemos de rastreador hoje?', 'vendas por período'.",
+            "description": "📈 Consulta VENDAS agregadas (SEM NF/cliente) no legado Make/Spalla por período, com filtro opcional por termo, quebrando por centro de custo e tipo de operação. Use para: 'quanto vendemos hoje?', 'resumo do mês', 'percentuais por centro'. ⚠️ Se o usuário pedir 'quais NFs', 'que nota foi emitida', 'detalhar por NF/cliente', use `consultar_vendas_nf_make`.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1671,7 +1671,7 @@ def get_available_tools(compact: bool = True, whitelist: Optional[List[str]] = N
         "type": "function",
         "function": {
             "name": "consultar_vendas_nf_make",
-            "description": "Consulta vendas por NF no SQL Server legado (Make/Spalla): data, número NF (best-effort), cliente (se existir), total da NF e centro de custo. Use para perguntas do tipo: 'vendas por NF em janeiro', 'quanto vendemos de alho em janeiro por NF', 'liste as NFs de venda hoje'.",
+            "description": "🧾 Consulta VENDAS POR NF (com número de NF e cliente/empresa quando disponível) no legado Make/Spalla. Use SEMPRE quando o usuário pedir: 'quais notas/NFs foram emitidas hoje', 'detalhar as NFs', 'mostrar notas de hoje', 'ver cliente por NF', ou qualquer pedido de detalhe por nota.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1748,7 +1748,11 @@ def get_available_tools(compact: bool = True, whitelist: Optional[List[str]] = N
                     },
                     "operacao": {
                         "type": "string",
-                        "description": "Filtra por tipo de operação (contains em descrição). Ex: 'Comissão', 'Nacionalização', 'Devolução'."
+                        "description": "Filtra por tipo de operação (contains em descrição). ⚠️ Observação: se o usuário disser 'rastreador/comex/vdm', isso costuma ser CENTRO (use `centro`)."
+                    },
+                    "centro": {
+                        "type": "string",
+                        "description": "Filtra por centro de custo (contains). Ex: 'Rastreador', 'Comex', 'VDM'."
                     },
                     "data": {
                         "type": "string",
